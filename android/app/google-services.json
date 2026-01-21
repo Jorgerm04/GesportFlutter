@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "370342781117",
+    "project_id": "gesport-26b1d",
+    "storage_bucket": "gesport-26b1d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:370342781117:android:c9a198dd449d9530b6d7d4",
+        "android_client_info": {
+          "package_name": "com.example.gesport"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjh18NPjMPmAl1wuwf1SrKHpPNL_OUG98"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
