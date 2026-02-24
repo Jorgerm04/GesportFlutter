@@ -1,11 +1,13 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:gesport/auth/auth_gate.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
 
-void main() async{
-  if(Firebase.apps.isEmpty){
-    WidgetsFlutterBinding.ensureInitialized();
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('es', null);
+  if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -19,13 +21,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        title: 'Gesport',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0E5CAD)),
-          useMaterial3: true,
-        ),
-        home: const AuthGate()
+      title: 'Gesport',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0E5CAD)),
+        useMaterial3: true,
+      ),
+      home: const AuthGate(),
     );
   }
 }

@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:gesport/services/auth_service.dart'; // Importa el servicio
+import 'package:flutter/services.dart';
+import 'package:gesport/services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,6 +15,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
+  final TextEditingController ageController = TextEditingController();
   final AuthService _authService = AuthService();
 
   bool obscurePassword = true;
@@ -23,9 +26,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final username = usernameController.text.trim();
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
+    final phone = phoneController.text.trim();
+    final ageText = ageController.text.trim();
 
     if (username.isEmpty || email.isEmpty || password.isEmpty) {
-      _showSnackBar('Por favor, rellena todos los campos');
+      _showSnackBar('Por favor, rellena todos los campos obligatorios');
       return;
     }
 
@@ -34,57 +39,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    if (ageText.isNotEmpty) {
+      final age = int.tryParse(ageText);
+      if (age == null || age < 1 || age > 120) {
+        _showSnackBar('Introduce una edad válida');
+        return;
+      }
+    }
+
     setState(() => isLoading = true);
 
     try {
-      // 1. Crear el usuario en Firebase Auth
-      UserCredential? credential = await _authService.signUp(email, password, username);
+      UserCredential? credential =
+      await _authService.signUp(email, password, username);
 
       if (credential != null && credential.user != null) {
         final String uid = credential.user!.uid;
+        final int? age = ageText.isNotEmpty ? int.tryParse(ageText) : null;
 
-        // 2. Buscar si ya existe un documento con este EMAIL (creado por el Admin)
         final querySnapshot = await FirebaseFirestore.instance
             .collection('usuarios')
             .where('email', isEqualTo: email)
             .get();
 
         if (querySnapshot.docs.isNotEmpty) {
-          // CASO A: El Admin ya creó el perfil.
-          // Movemos los datos al documento con el UID correcto y borramos el temporal si hace falta,
-          // o simplemente actualizamos el documento existente si el ID ya era el UID.
-
-          // Nota: Si el admin creó el usuario usando un ID automático,
-          // aquí lo vinculamos al UID real de Auth.
+          // CASO A: El Admin ya creó el perfil
           String oldDocId = querySnapshot.docs.first.id;
-          Map<String, dynamic> existingData = querySnapshot.docs.first.data();
+          Map<String, dynamic> existingData =
+          querySnapshot.docs.first.data();
 
-          // Creamos el documento definitivo con el ID = UID
-          await FirebaseFirestore.instance.collection('usuarios').doc(uid).set({
-            'nombre': username, // Priorizamos el nombre que el usuario elige al registrarse
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(uid)
+              .set({
+            'nombre': username,
             'email': email,
-            'rol': existingData['rol'] ?? 'jugador', // Mantenemos el rol que puso el Admin
-            'createdAt': existingData['createdAt'] ?? FieldValue.serverTimestamp(),
+            'phone': phone,
+            'age': age,
+            'rol': existingData['rol'] ?? 'jugador',
+            'createdAt':
+            existingData['createdAt'] ?? FieldValue.serverTimestamp(),
             'lastLogin': FieldValue.serverTimestamp(),
           });
 
-          // Si el ID antiguo era distinto al UID, borramos el "hueco" temporal
           if (oldDocId != uid) {
-            await FirebaseFirestore.instance.collection('usuarios').doc(oldDocId).delete();
+            await FirebaseFirestore.instance
+                .collection('usuarios')
+                .doc(oldDocId)
+                .delete();
           }
         } else {
-          // CASO B: Es un registro totalmente nuevo
-          await FirebaseFirestore.instance.collection('usuarios').doc(uid).set({
+          // CASO B: Registro totalmente nuevo
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(uid)
+              .set({
             'nombre': username,
             'email': email,
-            'rol': 'jugador', // Rol por defecto
+            'phone': phone,
+            'age': age,
+            'rol': 'jugador',
             'createdAt': FieldValue.serverTimestamp(),
           });
         }
 
         if (mounted) {
           _showSnackBar('Cuenta creada con éxito', isError: false);
-          // No hace falta pop() porque el AuthWrapper detectará el login y cambiará la pantalla
         }
       }
     } catch (e) {
@@ -97,10 +117,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView( // Evita error de píxeles con el teclado
+      body: SingleChildScrollView(
         child: Container(
           width: MediaQuery.of(context).size.width,
-          height: MediaQuery.of(context).size.height,
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height,
+          ),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -114,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Spacer(),
+                  const SizedBox(height: 40),
                   const Text(
                     'Gesport',
                     style: TextStyle(
@@ -126,32 +148,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Entrena. gestiona. mejora.',
+                    'Entrena. Gestiona. Mejora.',
                     style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 40),
 
                   _buildInput(
                     controller: usernameController,
-                    hint: 'Nombre de usuario',
+                    hint: 'Nombre de usuario *',
                     icon: Icons.person_outline,
                   ),
                   const SizedBox(height: 16),
                   _buildInput(
                     controller: emailController,
-                    hint: 'Email',
+                    hint: 'Email *',
                     icon: Icons.alternate_email,
+                    keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
                   _buildInput(
                     controller: passwordController,
-                    hint: 'Contraseña',
+                    hint: 'Contraseña *',
                     icon: Icons.lock_outline,
                     isPassword: true,
                   ),
+                  const SizedBox(height: 16),
+                  _buildInput(
+                    controller: phoneController,
+                    hint: 'Teléfono (opcional)',
+                    icon: Icons.phone_outlined,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9+\s\-]'))
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildInput(
+                    controller: ageController,
+                    hint: 'Edad (opcional)',
+                    icon: Icons.cake_outlined,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly
+                    ],
+                  ),
                   const SizedBox(height: 32),
 
-                  // BOTÓN REGISTRO CONECTADO
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -164,10 +207,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                       child: isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
+                          ? const CircularProgressIndicator(
+                          color: Colors.white)
                           : const Text(
                         'Registrarse',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white),
                       ),
                     ),
                   ),
@@ -176,17 +223,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('¿Ya tienes cuenta?', style: TextStyle(color: Colors.white54)),
+                      const Text('¿Ya tienes cuenta?',
+                          style: TextStyle(color: Colors.white54)),
                       TextButton(
-                        style: TextButton.styleFrom(foregroundColor: Colors.white),
+                        style: TextButton.styleFrom(
+                            foregroundColor: Colors.white),
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Inicia sesión', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text('Inicia sesión',
+                            style:
+                            TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  const Text('© 2025 Gesport', style: TextStyle(color: Colors.white38, fontSize: 12)),
-                  const SizedBox(height: 16),
+                  const Text('© 2025 Gesport',
+                      style: TextStyle(
+                          color: Colors.white38, fontSize: 12)),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -196,12 +248,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // Widget _buildInput (se mantiene igual que en tu código original)
   Widget _buildInput({
     required TextEditingController controller,
     required String hint,
     required IconData icon,
     bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -211,6 +264,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: TextField(
         controller: controller,
         obscureText: isPassword ? obscurePassword : false,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           hintText: hint,
@@ -219,14 +274,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
           suffixIcon: isPassword
               ? IconButton(
             icon: Icon(
-              obscurePassword ? Icons.visibility_off : Icons.visibility,
+              obscurePassword
+                  ? Icons.visibility_off
+                  : Icons.visibility,
               color: Colors.white54,
             ),
-            onPressed: () => setState(() => obscurePassword = !obscurePassword),
+            onPressed: () => setState(
+                    () => obscurePassword = !obscurePassword),
           )
               : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         ),
       ),
     );
@@ -238,8 +297,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.redAccent : Colors.green,
-        behavior: SnackBarBehavior.floating, // Se ve más moderno
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

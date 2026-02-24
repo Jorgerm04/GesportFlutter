@@ -7,7 +7,6 @@ import 'package:gesport/screens/user_form_screen.dart';
 class UsersScreen extends StatelessWidget {
   const UsersScreen({super.key});
 
-  // Función para obtener el color según el rol
   Color _getRoleColor(String? role) {
     switch (role?.toLowerCase()) {
       case 'admin': return Colors.deepPurpleAccent;

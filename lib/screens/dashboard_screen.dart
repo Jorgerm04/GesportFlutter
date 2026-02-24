@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gesport/services/auth_service.dart';
 import 'package:gesport/screens/users_screen.dart';
+import 'package:gesport/screens/teams_screen.dart';
+import 'package:gesport/screens/courts_screen.dart';
+import 'package:gesport/screens/bookings_screen.dart';
+import 'package:gesport/screens/seed_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -10,14 +14,26 @@ class DashboardScreen extends StatelessWidget {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("Admin Dashboard", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Admin Dashboard',
+          style: TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
+            tooltip: 'Datos de prueba',
+            icon: const Icon(Icons.dataset_rounded, color: Colors.white70),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SeedScreen()),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async => await AuthService().signOut(),
-          )
+          ),
         ],
       ),
       body: Container(
@@ -45,7 +61,8 @@ class DashboardScreen extends StatelessWidget {
                   color: Colors.blueAccent,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const UsersScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => const UsersScreen()),
                   ),
                 ),
                 _buildDashboardCard(
@@ -53,21 +70,33 @@ class DashboardScreen extends StatelessWidget {
                   title: 'Equipos',
                   icon: Icons.groups_rounded,
                   color: Colors.orangeAccent,
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const TeamsScreen()),
+                  ),
                 ),
                 _buildDashboardCard(
                   context,
-                  title: 'Partidos',
-                  icon: Icons.sports_soccer_rounded,
+                  title: 'Reservas',
+                  icon: Icons.event_available_rounded,
                   color: Colors.greenAccent,
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const BookingsScreen()),
+                  ),
                 ),
                 _buildDashboardCard(
                   context,
                   title: 'Pistas',
                   icon: Icons.stadium_rounded,
                   color: Colors.redAccent,
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const CourtsScreen()),
+                  ),
                 ),
               ],
             ),
@@ -77,8 +106,13 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDashboardCard(BuildContext context,
-      {required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
+  Widget _buildDashboardCard(
+      BuildContext context, {
+        required String title,
+        required IconData icon,
+        required Color color,
+        required VoidCallback onTap,
+      }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -91,11 +125,21 @@ class DashboardScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 40, color: color),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 36, color: color),
+            ),
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600),
             ),
           ],
         ),
