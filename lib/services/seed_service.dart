@@ -230,31 +230,94 @@ class SeedService {
 
   Future<void> _seedEquipos(
       List<String> jugIds, List<String> entIds) async {
+
+    // ── Pádel (2 equipos) ────────────────────────────────────────────────────
     await _equipos.add({
-      'nombre': 'Leones del Sur',
-      'descripcion': 'Equipo de pádel masculino. Competición regional liga federada.',
-      'entrenadorId':     entIds.isNotEmpty ? entIds[0] : null,
-      'entrenadorNombre': 'Roberto Alonso',
-      'jugadoresIds':     jugIds.length >= 4 ? jugIds.sublist(0, 4) : jugIds,
-      'createdAt': FieldValue.serverTimestamp(),
+      'nombre':          'Leones del Sur',
+      'descripcion':     'Equipo de pádel masculino. Liga federada regional.',
+      'deporte':         'padel',
+      'entrenadorId':    entIds.isNotEmpty ? entIds[0] : null,
+      'entrenadorNombre':'Roberto Alonso',
+      'jugadoresIds':    jugIds.length >= 4 ? jugIds.sublist(0, 4) : jugIds,
+      'createdAt':       FieldValue.serverTimestamp(),
+    });
+    await _equipos.add({
+      'nombre':          'Raquetas Norte',
+      'descripcion':     'Equipo mixto de pádel. Torneos de verano.',
+      'deporte':         'padel',
+      'entrenadorId':    entIds.length >= 2 ? entIds[1] : null,
+      'entrenadorNombre':'Patricia Vega',
+      'jugadoresIds':    jugIds.length >= 6 ? jugIds.sublist(2, 6) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
     });
 
+    // ── Fútbol (3 equipos) ────────────────────────────────────────────────────
     await _equipos.add({
-      'nombre': 'Panteras FC',
-      'descripcion': 'Equipo femenino de fútbol 7. Entrenamiento martes y jueves.',
-      'entrenadorId':     entIds.length >= 2 ? entIds[1] : null,
-      'entrenadorNombre': 'Patricia Vega',
-      'jugadoresIds':     jugIds.length >= 8 ? jugIds.sublist(4, 8) : [],
-      'createdAt': FieldValue.serverTimestamp(),
+      'nombre':          'Panteras FC',
+      'descripcion':     'Equipo femenino de fútbol 7. Entrenamiento mar y jue.',
+      'deporte':         'futbol',
+      'entrenadorId':    entIds.length >= 2 ? entIds[1] : null,
+      'entrenadorNombre':'Patricia Vega',
+      'jugadoresIds':    jugIds.length >= 8 ? jugIds.sublist(4, 8) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
+    });
+    await _equipos.add({
+      'nombre':          'Estrellas FC',
+      'descripcion':     'Fútbol 11 masculino. División de honor local.',
+      'deporte':         'futbol',
+      'entrenadorId':    entIds.length >= 3 ? entIds[2] : null,
+      'entrenadorNombre':'Fernando Ortiz',
+      'jugadoresIds':    jugIds.length >= 10 ? jugIds.sublist(0, 5) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
+    });
+    await _equipos.add({
+      'nombre':          'Truenos CF',
+      'descripcion':     'Equipo juvenil de fútbol 7. Categoría sub-18.',
+      'deporte':         'futbol',
+      'entrenadorId':    entIds.isNotEmpty ? entIds[0] : null,
+      'entrenadorNombre':'Roberto Alonso',
+      'jugadoresIds':    jugIds.length >= 6 ? jugIds.sublist(1, 4) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
     });
 
+    // ── Baloncesto (2 equipos) ────────────────────────────────────────────────
     await _equipos.add({
-      'nombre': 'Águilas Basket',
-      'descripcion': 'Equipo mixto de baloncesto 3x3. Participan en liga municipal.',
-      'entrenadorId':     entIds.length >= 3 ? entIds[2] : null,
-      'entrenadorNombre': 'Fernando Ortiz',
-      'jugadoresIds':     jugIds.length >= 10 ? jugIds.sublist(6, 10) : [],
-      'createdAt': FieldValue.serverTimestamp(),
+      'nombre':          'Águilas Basket',
+      'descripcion':     'Equipo mixto de baloncesto 3x3. Liga municipal.',
+      'deporte':         'baloncesto',
+      'entrenadorId':    entIds.length >= 3 ? entIds[2] : null,
+      'entrenadorNombre':'Fernando Ortiz',
+      'jugadoresIds':    jugIds.length >= 10 ? jugIds.sublist(6, 10) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
+    });
+    await _equipos.add({
+      'nombre':          'Cóndores BC',
+      'descripcion':     'Baloncesto masculino. Campeones copa local 2023.',
+      'deporte':         'baloncesto',
+      'entrenadorId':    entIds.length >= 2 ? entIds[1] : null,
+      'entrenadorNombre':'Patricia Vega',
+      'jugadoresIds':    jugIds.length >= 8 ? jugIds.sublist(3, 7) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
+    });
+
+    // ── Tenis (2 equipos) ─────────────────────────────────────────────────────
+    await _equipos.add({
+      'nombre':          'Ases del Tenis',
+      'descripcion':     'Club de tenis. Competición individual y dobles.',
+      'deporte':         'tenis',
+      'entrenadorId':    entIds.isNotEmpty ? entIds[0] : null,
+      'entrenadorNombre':'Roberto Alonso',
+      'jugadoresIds':    jugIds.length >= 4 ? jugIds.sublist(0, 3) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
+    });
+    await _equipos.add({
+      'nombre':          'Voleas Club',
+      'descripcion':     'Tenis femenino. Torneos provinciales.',
+      'deporte':         'tenis',
+      'entrenadorId':    entIds.length >= 3 ? entIds[2] : null,
+      'entrenadorNombre':'Fernando Ortiz',
+      'jugadoresIds':    jugIds.length >= 5 ? jugIds.sublist(2, 5) : [],
+      'createdAt':       FieldValue.serverTimestamp(),
     });
   }
 
@@ -539,6 +602,76 @@ class SeedService {
 
     for (final r in reservasEquipo) {
       await _reservas.add(r);
+    }
+
+    // ── Reservas de partido ─────────────────────────────────────────────────
+    final arbitrosSnap = await _db.collection('usuarios')
+        .where('rol', isEqualTo: 'arbitro')
+        .get();
+
+    if (arbitrosSnap.docs.isNotEmpty && equiposList.length >= 2) {
+      final arb0     = arbitrosSnap.docs[0];
+      final arb0Data = arb0.data() as Map<String, dynamic>;
+      final eq0      = equiposList[0];
+      final eq1      = equiposList[1];
+      final eq0d     = eq0.data();
+      final eq1d     = eq1.data();
+
+      // Partido pasado con resultado
+      await _reservas.add({
+        'tipo':                  'partido',
+        'usuarioId':             '',
+        'usuarioNombre':         '',
+        'pistaId':               courtIds.length > 3 ? courtIds[3] : 'c3',
+        'pistaNombre':           'Fútbol 7 Norte',
+        'fecha':                 Timestamp.fromDate(
+            DateTime(d(5).year, d(5).month, d(5).day)),
+        'horaInicio':            Timestamp.fromDate(
+            DateTime(d(5).year, d(5).month, d(5).day, 11, 0)),
+        'horaFin':               Timestamp.fromDate(
+            DateTime(d(5).year, d(5).month, d(5).day, 12, 30)),
+        'cancelada':             false,
+        'creadaPorAdminId':      'admin',
+        'deporte':               'futbol',
+        'equipoLocalId':         eq0.id,
+        'equipoLocalNombre':     eq0d['nombre'] as String? ?? '',
+        'equipoVisitanteId':     eq1.id,
+        'equipoVisitanteNombre': eq1d['nombre'] as String? ?? '',
+        'arbitroId':             arb0.id,
+        'arbitroNombre':         arb0Data['nombre'] as String? ?? '',
+        'puntosLocal':           3,
+        'puntosVisitante':       1,
+        'notas':                 'Jornada 1 liga municipal',
+        'createdAt':             FieldValue.serverTimestamp(),
+      });
+
+      // Partido futuro sin resultado
+      await _reservas.add({
+        'tipo':                  'partido',
+        'usuarioId':             '',
+        'usuarioNombre':         '',
+        'pistaId':               courtIds.length > 3 ? courtIds[3] : 'c3',
+        'pistaNombre':           'Fútbol 7 Norte',
+        'fecha':                 Timestamp.fromDate(
+            DateTime(f(7).year, f(7).month, f(7).day)),
+        'horaInicio':            Timestamp.fromDate(
+            DateTime(f(7).year, f(7).month, f(7).day, 16, 30)),
+        'horaFin':               Timestamp.fromDate(
+            DateTime(f(7).year, f(7).month, f(7).day, 18, 0)),
+        'cancelada':             false,
+        'creadaPorAdminId':      'admin',
+        'deporte':               'futbol',
+        'equipoLocalId':         eq1.id,
+        'equipoLocalNombre':     eq1d['nombre'] as String? ?? '',
+        'equipoVisitanteId':     eq0.id,
+        'equipoVisitanteNombre': eq0d['nombre'] as String? ?? '',
+        'arbitroId':             arb0.id,
+        'arbitroNombre':         arb0Data['nombre'] as String? ?? '',
+        'puntosLocal':           null,
+        'puntosVisitante':       null,
+        'notas':                 'Jornada 2 liga municipal',
+        'createdAt':             FieldValue.serverTimestamp(),
+      });
     }
 
     for (final r in [...pasadas, ...futuras]) {

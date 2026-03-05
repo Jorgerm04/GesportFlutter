@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gesport/models/court.dart';
 import 'package:gesport/services/court_service.dart';
+import 'package:gesport/utils/app_theme.dart';
 
 class CourtFormScreen extends StatefulWidget {
   final CourtModel? court;
@@ -91,13 +92,7 @@ class _CourtFormScreenState extends State<CourtFormScreen> {
       ),
       body: Container(
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -125,7 +120,7 @@ class _CourtFormScreenState extends State<CourtFormScreen> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<CourtType>(
                         value: _tipo,
-                        dropdownColor: const Color(0xFF0A1A2F),
+                        dropdownColor: AppTheme.bg1,
                         isExpanded: true,
                         style: const TextStyle(color: Colors.white),
                         items: CourtType.values
@@ -206,7 +201,7 @@ class _CourtFormScreenState extends State<CourtFormScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _save,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0E5CAD),
+                        backgroundColor: AppTheme.primary,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),

@@ -6,7 +6,11 @@ import 'package:gesport/models/user.dart';
 import 'package:gesport/services/auth_service.dart';
 import 'package:gesport/services/booking_service.dart';
 import 'package:gesport/screens/booking_form_screen.dart';
+import 'package:gesport/screens/teams_screen.dart';
 import 'package:intl/intl.dart';
+import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
+import 'package:gesport/utils/app_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -97,28 +101,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _cancelarReserva(BookingModel b) async {
     // Solo puede cancelar reservas individuales propias,
     // o de equipo si es el entrenador/admin
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0A1A2F),
-        title:   const Text('Cancelar reserva',
-            style: TextStyle(color: Colors.white)),
-        content: Text(
-          b.esDeEquipo
-              ? '¿Cancelar la reserva del equipo ${b.equipoNombre} en ${b.pistaNombre}?'
-              : '¿Seguro que quieres cancelar la reserva en ${b.pistaNombre}?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Sí, cancelar',
-                  style: TextStyle(color: Colors.redAccent))),
-        ],
-      ),
+    final confirm = await ConfirmDialog.show(
+      context,
+      title:        'Cancelar reserva',
+      content:      b.esDeEquipo
+          ? '¿Cancelar la reserva del equipo \${b.equipoNombre} en \${b.pistaNombre}?'
+          : '¿Seguro que quieres cancelar la reserva en \${b.pistaNombre}?',
+      confirmLabel: 'Sí, cancelar',
     );
     if (confirm == true) {
       await _bookingService.setCancelada(b.id, true);
@@ -131,15 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
         (rol == UserRole.entrenador && _equipoIds.isNotEmpty);
   }
 
-  bool _puedeCancelarReserva(BookingModel b) {
-    final uid = _firestoreUserId;
-    if (uid == null) return false;
-    if (b.esDeEquipo) {
-      // Solo el entrenador (usuarioId que la creó) puede cancelar la de equipo
-      return b.usuarioId == uid;
-    }
-    return b.usuarioId == uid;
-  }
+  bool _puedeCancelarReserva(BookingModel b) =>
+      _firestoreUserId != null && b.usuarioId == _firestoreUserId;
 
   @override
   Widget build(BuildContext context) {
@@ -171,8 +153,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0E5CAD),
+      floatingActionButton: _currentUser?.rol == UserRole.arbitro ? null : FloatingActionButton.extended(
+        backgroundColor: AppTheme.primary,
         icon:  const Icon(Icons.add, color: Colors.white),
         label: const Text('Nueva reserva',
             style: TextStyle(color: Colors.white)),
@@ -189,20 +171,15 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Container(
         height:     double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin:  Alignment.topCenter,
-            end:    Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: (_loadingUser || _loadingEquipos)
               ? const Center(
               child: CircularProgressIndicator(color: Colors.white))
               : StreamBuilder<List<BookingModel>>(
-            stream: _bookingService.getAllUserRelatedBookings(
-                uid, _equipoIds),
+            stream: _currentUser?.rol == UserRole.arbitro
+                ? _bookingService.getPartidosArbitro(uid)
+                : _bookingService.getAllUserRelatedBookings(uid, _equipoIds),
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -246,17 +223,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 28),
 
                     // ── Próximas reservas ──────────────────
-                    _sectionHeader(
-                        'Próximas reservas',
-                        Icons.event_available,
-                        Colors.greenAccent,
+                    SectionHeader(
+                        title: _currentUser?.rol == UserRole.arbitro
+                            ? 'Mis partidos'
+                            : 'Próximas reservas',
+                        icon:_currentUser?.rol == UserRole.arbitro
+                            ? Icons.sports
+                            : Icons.event_available,
+                        color:_currentUser?.rol == UserRole.arbitro
+                            ? Colors.yellowAccent
+                            : Colors.greenAccent,
                         badge: proximas.length),
                     const SizedBox(height: 12),
                     if (proximas.isEmpty)
-                      _emptyState(
-                          Icons.event_note,
-                          'No tienes reservas próximas',
-                          'Pulsa + para hacer una nueva reserva')
+                      EmptyState(
+                          icon:Icons.event_note,
+                          text:'No tienes reservas próximas',
+                          subtitle: 'Pulsa + para hacer una nueva reserva')
                     else
                       ...proximas.map((b) => _buildProximaCard(
                           b, fmtDate, fmtTime, context)),
@@ -264,17 +247,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 32),
 
                     // ── Historial ──────────────────────────
-                    _sectionHeader(
-                        'Historial',
-                        Icons.history,
-                        Colors.white38,
+                    SectionHeader(
+                        title: 'Historial',
+                        icon: Icons.history,
+                        color:Colors.white38,
                         badge: historial.length),
                     const SizedBox(height: 12),
                     if (historial.isEmpty)
-                      _emptyState(
-                          Icons.history_toggle_off,
-                          'Sin historial todavía',
-                          null)
+                      EmptyState(
+                          icon: Icons.history_toggle_off,
+                          text: 'Sin historial todavía',
+                          subtitle: null)
                     else
                       ...historial.map((b) =>
                           _buildHistorialCard(b, fmtDate, fmtTime)),
@@ -298,124 +281,221 @@ class _HomeScreenState extends State<HomeScreen> {
         inicio.month == now.month &&
         inicio.year  == now.year;
 
-    final cardColor   = b.esDeEquipo ? Colors.cyanAccent : Colors.greenAccent;
-    final borderColor = b.esDeEquipo
-        ? Colors.cyanAccent.withOpacity(0.4)
+    final cardColor   = b.esPartido  ? Colors.yellowAccent
+        : b.esDeEquipo ? Colors.cyanAccent
+        : Colors.greenAccent;
+    final borderColor = b.esPartido  ? Colors.yellowAccent.withOpacity(0.4)
+        : b.esDeEquipo ? Colors.cyanAccent.withOpacity(0.4)
         : Colors.greenAccent.withOpacity(0.2);
 
-    return Container(
-      margin:     const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color:        Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border:       Border.all(color: borderColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            // Badge día
-            Container(
-              width: 52, height: 60,
-              decoration: BoxDecoration(
-                color:        cardColor.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (isToday)
-                    Text('HOY',
-                        style: TextStyle(
-                            color:      cardColor,
-                            fontSize:   10,
-                            fontWeight: FontWeight.bold))
-                  else ...[
-                    Text(inicio.day.toString().padLeft(2, '0'),
-                        style: TextStyle(
-                            color:      cardColor,
-                            fontSize:   20,
-                            fontWeight: FontWeight.bold)),
-                    Text(
-                      _capitalize(
-                          DateFormat('MMM', 'es').format(inicio)),
-                      style: TextStyle(
-                          color: cardColor.withOpacity(0.7),
-                          fontSize: 11),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
+    // Badge tipo pill (equipo o partido) — no se muestra al árbitro
+    final rol = _currentUser?.rol;
+    final showBadge = rol != UserRole.arbitro &&
+        (b.esDeEquipo || b.esPartido);
 
-            // Datos
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Badge equipo si aplica
-                  if (b.esDeEquipo) ...[
-                    Row(children: [
-                      const Icon(Icons.groups,
-                          color: Colors.cyanAccent, size: 14),
-                      const SizedBox(width: 4),
-                      Text(b.equipoNombre ?? '',
-                          style: const TextStyle(
-                              color:      Colors.cyanAccent,
-                              fontSize:   11,
-                              fontWeight: FontWeight.w600)),
-                    ]),
-                    const SizedBox(height: 3),
-                  ],
-                  Text(b.pistaNombre,
-                      style: const TextStyle(
-                          color:      Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize:   15)),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${fmtTime.format(b.horaInicio)} – ${fmtTime.format(b.horaFin)}',
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 13),
-                  ),
-                  if (!isToday) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      _capitalize(fmtDate.format(inicio)),
-                      style: const TextStyle(
-                          color: Colors.white38, fontSize: 12),
-                    ),
-                  ],
-                  if (b.notas != null && b.notas!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      b.notas!,
-                      style: const TextStyle(
-                          color:      Colors.white38,
-                          fontSize:   11,
-                          fontStyle:  FontStyle.italic),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // Botón cancelar (solo si puede)
-            if (_puedeCancelarReserva(b))
-              IconButton(
-                tooltip:     'Cancelar reserva',
-                padding:     EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.cancel_outlined,
-                    color: Colors.redAccent, size: 22),
-                onPressed:   () => _cancelarReserva(b),
-              ),
-          ],
+    Widget badgePill(String label, Color color, IconData icon) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color:        color.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(20),
+          border:       Border.all(color: color.withOpacity(0.5)),
         ),
-      ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 11),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  color:       color,
+                  fontSize:    10,
+                  fontWeight:  FontWeight.w700,
+                  letterSpacing: 0.4)),
+        ]),
+      );
+    }
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          margin:     const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color:        Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(16),
+            border:       Border.all(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 20, 14, 14),
+            child: Row(
+              children: [
+                // Badge día
+                Container(
+                  width: 52, height: 60,
+                  decoration: BoxDecoration(
+                    color:        cardColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isToday)
+                        Text('HOY',
+                            style: TextStyle(
+                                color:      cardColor,
+                                fontSize:   10,
+                                fontWeight: FontWeight.bold))
+                      else ...[
+                        Text(inicio.day.toString().padLeft(2, '0'),
+                            style: TextStyle(
+                                color:      cardColor,
+                                fontSize:   20,
+                                fontWeight: FontWeight.bold)),
+                        Text(
+                          capitalize(
+                              DateFormat('MMM', 'es').format(inicio)),
+                          style: TextStyle(
+                              color: cardColor.withOpacity(0.7),
+                              fontSize: 11),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+
+                // Datos
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Contenido partido (marcador)
+                      if (b.esPartido) ...[
+                        const SizedBox(height: 2),
+                        // Marcador
+                        Row(children: [
+                          Expanded(
+                            child: Text(b.equipoLocalNombre ?? '',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.yellowAccent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: Colors.yellowAccent.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              b.resultado ?? 'vs',
+                              style: const TextStyle(
+                                  color:      Colors.yellowAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize:   14),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(b.equipoVisitanteNombre ?? '',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13),
+                                textAlign: TextAlign.end,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                        ]),
+                        // Pista del partido
+                        const SizedBox(height: 4),
+                        Row(children: [
+                          const Icon(Icons.stadium,
+                              color: Colors.white38, size: 12),
+                          const SizedBox(width: 4),
+                          Text(b.pistaNombre,
+                              style: const TextStyle(
+                                  color: Colors.white38, fontSize: 11)),
+                        ]),
+                        // Árbitro solo si NO es el usuario logado
+                        if (b.arbitroNombre != null &&
+                            _currentUser?.rol != UserRole.arbitro) ...[
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            const Icon(Icons.sports_handball,
+                                color: Colors.white38, size: 12),
+                            const SizedBox(width: 4),
+                            Text(b.arbitroNombre!,
+                                style: const TextStyle(
+                                    color: Colors.white38, fontSize: 11)),
+                          ]),
+                        ],
+                        const SizedBox(height: 4),
+                      ],
+                      // (badge de equipo mostrado como pill en Stack)
+                      if (!b.esPartido)
+                        Text(b.pistaNombre,
+                            style: const TextStyle(
+                                color:      Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize:   15)),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${fmtTime.format(b.horaInicio)} – ${fmtTime.format(b.horaFin)}',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 13),
+                      ),
+                      if (!isToday) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          capitalize(fmtDate.format(inicio)),
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 12),
+                        ),
+                      ],
+                      if (b.notas != null && b.notas!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          b.notas!,
+                          style: const TextStyle(
+                              color:      Colors.white38,
+                              fontSize:   11,
+                              fontStyle:  FontStyle.italic),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // Botón cancelar (solo si puede)
+                if (_puedeCancelarReserva(b))
+                  IconButton(
+                    tooltip:     'Cancelar reserva',
+                    padding:     EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.cancel_outlined,
+                        color: Colors.redAccent, size: 22),
+                    onPressed:   () => _cancelarReserva(b),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Badge pill posicionado arriba a la derecha ──────────────────
+        if (showBadge)
+          Positioned(
+            top:   -1,
+            right: 12,
+            child: b.esPartido
+                ? badgePill('PARTIDO', Colors.yellowAccent, Icons.sports)
+                : badgePill('EQUIPO',  Colors.cyanAccent,   Icons.groups),
+          ),
+      ],
     );
   }
 
@@ -466,7 +546,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${_capitalize(fmtDate.format(b.fecha))}  ·  '
+                  '${capitalize(fmtDate.format(b.fecha))}  ·  '
                       '${fmtTime.format(b.horaInicio)} – ${fmtTime.format(b.horaFin)}',
                   style: const TextStyle(color: Colors.white38, fontSize: 12),
                 ),
@@ -497,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showProfileSheet(BuildContext context) {
     showModalBottomSheet(
       context:            context,
-      backgroundColor:    const Color(0xFF0D1F35),
+      backgroundColor:    AppTheme.modalBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
@@ -515,7 +595,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 20),
             CircleAvatar(
               radius: 36,
-              backgroundColor: const Color(0xFF0E5CAD).withOpacity(0.25),
+              backgroundColor: AppTheme.primary.withOpacity(0.25),
               child: Text(
                 _currentUser?.nombre.isNotEmpty == true
                     ? _currentUser!.nombre[0].toUpperCase()
@@ -567,6 +647,45 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+            // Botón mis equipos para entrenador
+            if (_currentUser?.rol == UserRole.entrenador &&
+                _equipoIds.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TeamsScreen(
+                      coachId:     _firestoreUserId ?? '',
+                      coachNombre: _currentUser?.nombre,
+                    ),
+                  ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color:        Colors.orangeAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: Colors.orangeAccent.withOpacity(0.3)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.groups_rounded,
+                        color: Colors.orangeAccent, size: 16),
+                    const SizedBox(width: 8),
+                    const Text('Gestionar mis equipos',
+                        style: TextStyle(
+                            color:      Colors.orangeAccent,
+                            fontSize:   13,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.chevron_right,
+                        color: Colors.orangeAccent, size: 16),
+                  ]),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             const Divider(color: Colors.white10),
             const SizedBox(height: 12),
@@ -602,53 +721,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  Widget _sectionHeader(String title, IconData icon, Color color,
-      {int badge = 0}) {
-    return Row(children: [
-      Icon(icon, size: 18, color: color),
-      const SizedBox(width: 8),
-      Text(title,
-          style: const TextStyle(
-              color:      Colors.white,
-              fontSize:   17,
-              fontWeight: FontWeight.w700)),
-      if (badge > 0) ...[
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color:        color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(badge.toString(),
-              style: TextStyle(
-                  color:      color,
-                  fontSize:   12,
-                  fontWeight: FontWeight.bold)),
-        ),
-      ],
-    ]);
-  }
+  // _sectionHeader → SectionHeader widget de app_widgets.dart
 
-  Widget _emptyState(IconData icon, String text, String? subtitle) {
-    return Container(
-      width:   double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      decoration: BoxDecoration(
-        color:        Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(children: [
-        Icon(icon, color: Colors.white24, size: 36),
-        const SizedBox(height: 10),
-        Text(text, style: const TextStyle(color: Colors.white38, fontSize: 14)),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(color: Colors.white24, fontSize: 12)),
-        ],
-      ]),
-    );
-  }
+  // _emptyState → EmptyState widget de app_widgets.dart
 
   Widget _profileRow(IconData icon, String label, String value) {
     return Padding(
@@ -665,6 +740,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }

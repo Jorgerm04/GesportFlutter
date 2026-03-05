@@ -1,9 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gesport/models/user.dart';
 import 'package:gesport/models/team.dart';
 import 'package:gesport/screens/team_form_screen.dart';
+import 'package:gesport/services/user_service.dart';
+import 'package:gesport/utils/app_theme.dart';
 
 class UserFormScreen extends StatefulWidget {
   final String? uid;
@@ -14,17 +15,18 @@ class UserFormScreen extends StatefulWidget {
 }
 
 class _UserFormScreenState extends State<UserFormScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
-  UserRole _selectedRole = UserRole.jugador;
-  bool _isLoading = false;
+  final _service    = UserService();
+  final _formKey    = GlobalKey<FormState>();
+  final _nameCtrl   = TextEditingController();
+  final _emailCtrl  = TextEditingController();
+  final _phoneCtrl  = TextEditingController();
+  final _ageCtrl    = TextEditingController();
 
-  // Equipo asociado (solo en modo edición)
+  UserRole _selectedRole = UserRole.jugador;
+  bool     _isLoading    = false;
+
   Map<String, dynamic>? _equipoAsociado;
-  bool _loadingEquipo = false;
+  bool                  _loadingEquipo = false;
 
   bool get isEditing => widget.uid != null;
 
@@ -36,68 +38,46 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _ageController.dispose();
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _ageCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadUserData() async {
     setState(() => _isLoading = true);
-    final doc = await FirebaseFirestore.instance
-        .collection('usuarios')
-        .doc(widget.uid)
-        .get();
-    if (doc.exists) {
-      final data = doc.data()!;
-      _nameController.text = data['nombre'] ?? '';
-      _emailController.text = data['email'] ?? '';
-      _phoneController.text = data['phone'] ?? '';
-      _ageController.text =
-      data['age'] != null ? data['age'].toString() : '';
-      final role = UserRoleExtension.fromString(data['rol']);
-      setState(() {
-        _selectedRole = role;
-        _isLoading = false;
-      });
-      if (role == UserRole.jugador || role == UserRole.entrenador) {
-        _loadEquipo(role);
-      }
+
+    final user = await _service.getUserById(widget.uid!);
+    if (user == null) return;
+
+    _nameCtrl.text  = user.nombre;
+    _emailCtrl.text = user.email;
+    _phoneCtrl.text = user.phone;
+    _ageCtrl.text   = user.age?.toString() ?? '';
+
+    setState(() {
+      _selectedRole = user.rol;
+      _isLoading    = false;
+    });
+
+    if (user.rol == UserRole.jugador || user.rol == UserRole.entrenador) {
+      _loadEquipo(user.rol);
     }
   }
 
   Future<void> _loadEquipo(UserRole role) async {
     setState(() {
-      _loadingEquipo = true;
+      _loadingEquipo  = true;
       _equipoAsociado = null;
     });
 
-    QuerySnapshot snap;
-
-    if (role == UserRole.jugador) {
-      snap = await FirebaseFirestore.instance
-          .collection('equipos')
-          .where('jugadoresIds', arrayContains: widget.uid)
-          .limit(1)
-          .get();
-    } else {
-      snap = await FirebaseFirestore.instance
-          .collection('equipos')
-          .where('entrenadorId', isEqualTo: widget.uid)
-          .limit(1)
-          .get();
-    }
+    final equipo = await _service.getEquipoDelUsuario(widget.uid!, role);
 
     if (mounted) {
       setState(() {
-        _equipoAsociado = snap.docs.isNotEmpty
-            ? {
-          'id': snap.docs.first.id,
-          ...snap.docs.first.data() as Map<String, dynamic>
-        }
-            : null;
-        _loadingEquipo = false;
+        _equipoAsociado = equipo;
+        _loadingEquipo  = false;
       });
     }
   }
@@ -107,123 +87,105 @@ class _UserFormScreenState extends State<UserFormScreen> {
     setState(() => _isLoading = true);
 
     final data = {
-      'nombre': _nameController.text.trim(),
-      'email': _emailController.text.trim(),
-      'phone': _phoneController.text.trim(),
-      'age': _ageController.text.isNotEmpty
-          ? int.tryParse(_ageController.text.trim())
+      'nombre': _nameCtrl.text.trim(),
+      'email':  _emailCtrl.text.trim(),
+      'phone':  _phoneCtrl.text.trim(),
+      'age':    _ageCtrl.text.isNotEmpty
+          ? int.tryParse(_ageCtrl.text.trim())
           : null,
-      'rol': _selectedRole.name,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'rol':    _selectedRole.name,
     };
 
     try {
       if (isEditing) {
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(widget.uid)
-            .update(data);
+        await _service.updateUser(widget.uid!, data);
       } else {
-        await FirebaseFirestore.instance.collection('usuarios').add({
-          ...data,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        await _service.createUser(data);
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text("Error: $e"),
-              backgroundColor: Colors.redAccent),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:         Text('Error: $e'),
+          backgroundColor: Colors.redAccent,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(
-          isEditing ? "Editar Usuario" : "Nuevo Usuario",
-          style: const TextStyle(color: Colors.white),
-        ),
+        title: Text(isEditing ? 'Editar Usuario' : 'Nuevo Usuario',
+            style: const TextStyle(color: Colors.white)),
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        elevation:       0,
+        iconTheme:       const IconThemeData(color: Colors.white),
       ),
       body: Container(
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        height:     double.infinity,
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
-          child: _isLoading && isEditing
+          child: (_isLoading && isEditing)
               ? const Center(
               child: CircularProgressIndicator(color: Colors.white))
               : SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(24),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildTextField(
-                    controller: _nameController,
-                    label: "Nombre completo",
-                    icon: Icons.person,
-                  ),
+                      controller: _nameCtrl,
+                      label: 'Nombre completo',
+                      icon:  Icons.person),
                   const SizedBox(height: 20),
                   _buildTextField(
-                    controller: _emailController,
-                    label: "Email",
-                    icon: Icons.email,
-                    enabled: !isEditing,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
+                      controller:   _emailCtrl,
+                      label:        'Email',
+                      icon:         Icons.email,
+                      enabled:      !isEditing,
+                      keyboardType: TextInputType.emailAddress),
                   const SizedBox(height: 20),
                   _buildTextField(
-                    controller: _phoneController,
-                    label: "Teléfono",
-                    icon: Icons.phone,
-                    keyboardType: TextInputType.phone,
-                    required: false,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'[0-9+\s\-]'))
-                    ],
-                  ),
+                      controller:   _phoneCtrl,
+                      label:        'Teléfono',
+                      icon:         Icons.phone,
+                      keyboardType: TextInputType.phone,
+                      required:     false,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9+\s\-]'))
+                      ]),
                   const SizedBox(height: 20),
                   _buildTextField(
-                    controller: _ageController,
-                    label: "Edad",
-                    icon: Icons.cake,
-                    keyboardType: TextInputType.number,
-                    required: false,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly
-                    ],
-                    validator: (val) {
-                      if (val == null || val.isEmpty) return null;
-                      final age = int.tryParse(val);
-                      if (age == null || age < 1 || age > 120) {
-                        return 'Introduce una edad válida';
-                      }
-                      return null;
-                    },
-                  ),
+                      controller:   _ageCtrl,
+                      label:        'Edad',
+                      icon:         Icons.cake,
+                      keyboardType: TextInputType.number,
+                      required:     false,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly
+                      ],
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return null;
+                        final age = int.tryParse(val);
+                        if (age == null || age < 1 || age > 120) {
+                          return 'Introduce una edad válida';
+                        }
+                        return null;
+                      }),
                   const SizedBox(height: 20),
                   _buildRoleDropdown(),
 
-                  // ── Equipo asociado ──────────────────────
+                  // Equipo asociado (solo edición)
                   if (isEditing &&
                       (_selectedRole == UserRole.jugador ||
                           _selectedRole == UserRole.entrenador)) ...[
@@ -233,27 +195,25 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
                   const SizedBox(height: 40),
                   SizedBox(
-                    width: double.infinity,
+                    width:  double.infinity,
                     height: 52,
-                    child: ElevatedButton(
+                    child:  ElevatedButton(
                       onPressed: _isLoading ? null : _saveUser,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0E5CAD),
+                        backgroundColor: AppTheme.primary,
                         shape: RoundedRectangleBorder(
-                            borderRadius:
-                            BorderRadius.circular(12)),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isLoading
                           ? const CircularProgressIndicator(
                           color: Colors.white)
                           : Text(
-                        isEditing
-                            ? "Guardar Cambios"
-                            : "Crear Usuario",
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16),
-                      ),
+                          isEditing
+                              ? 'Guardar Cambios'
+                              : 'Crear Usuario',
+                          style: const TextStyle(
+                              color:    Colors.white,
+                              fontSize: 16)),
                     ),
                   ),
                 ],
@@ -265,42 +225,37 @@ class _UserFormScreenState extends State<UserFormScreen> {
     );
   }
 
-  // ── Sección equipo ───────────────────────────────────────────────────────
+  // ── Sección equipo ────────────────────────────────────────────────────────
 
   Widget _buildEquipoSection() {
     final isEntrenador = _selectedRole == UserRole.entrenador;
     final label = isEntrenador ? 'Equipo que entrena' : 'Equipo';
     final color = isEntrenador ? Colors.blueAccent : Colors.greenAccent;
-    final icon  = isEntrenador ? Icons.person_pin : Icons.sports_soccer;
+    final icon  = isEntrenador ? Icons.person_pin  : Icons.sports_soccer;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 15, color: color),
-            const SizedBox(width: 7),
-            Text(
-              label,
+        Row(children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 7),
+          Text(label,
               style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+                  color:      color,
+                  fontSize:   13,
+                  fontWeight: FontWeight.w600)),
+        ]),
         const SizedBox(height: 10),
         if (_loadingEquipo)
           Container(
-            height: 64,
+            height:     64,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color:        Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Center(
               child: SizedBox(
-                width: 20,
-                height: 20,
+                width: 20, height: 20,
                 child: CircularProgressIndicator(
                     color: Colors.white38, strokeWidth: 2),
               ),
@@ -316,35 +271,30 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
   Widget _buildNoTeamCard(bool isEntrenador) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding:    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color:        Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.07),
-            style: BorderStyle.solid),
+        border:       Border.all(color: Colors.white.withOpacity(0.07)),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.groups_rounded,
-              color: Colors.white24, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              isEntrenador
-                  ? 'No entrena ningún equipo todavía'
-                  : 'No pertenece a ningún equipo todavía',
-              style: const TextStyle(color: Colors.white38, fontSize: 13),
-            ),
+      child: Row(children: [
+        const Icon(Icons.groups_rounded, color: Colors.white24, size: 22),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            isEntrenador
+                ? 'No entrena ningún equipo todavía'
+                : 'No pertenece a ningún equipo todavía',
+            style: const TextStyle(color: Colors.white38, fontSize: 13),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
   Widget _buildTeamCard(
       Map<String, dynamic> equipo, Color color, bool isEntrenador) {
-    final nombre      = equipo['nombre'] as String? ?? 'Equipo';
+    final nombre      = equipo['nombre']      as String? ?? 'Equipo';
     final descripcion = equipo['descripcion'] as String? ?? '';
     final jugadores   = (equipo['jugadoresIds'] as List?)?.length ?? 0;
     final team        = TeamModel.fromMap(equipo['id'] as String, equipo);
@@ -359,98 +309,88 @@ class _UserFormScreenState extends State<UserFormScreen> {
         borderRadius: BorderRadius.circular(12),
         child: Ink(
           decoration: BoxDecoration(
-            color: color.withOpacity(0.07),
+            color:        color.withOpacity(0.07),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.25)),
+            border:       Border.all(color: color.withOpacity(0.25)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.groups_rounded, color: color, size: 24),
+            child: Row(children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color:        color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        nombre,
+                child: Icon(Icons.groups_rounded, color: color, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(nombre,
                         style: const TextStyle(
-                            color: Colors.white,
+                            color:      Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 14),
-                      ),
-                      if (descripcion.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          descripcion,
+                            fontSize:   14)),
+                    if (descripcion.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(descripcion,
                           style: const TextStyle(
                               color: Colors.white54, fontSize: 12),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.sports_soccer,
-                              size: 12, color: color.withOpacity(0.7)),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$jugadores jugador${jugadores == 1 ? '' : 'es'}',
-                            style: TextStyle(
-                                color: color.withOpacity(0.8), fontSize: 11),
-                          ),
-                          if (isEntrenador) ...[
-                            const SizedBox(width: 10),
-                            Icon(Icons.person_pin,
-                                size: 12, color: color.withOpacity(0.7)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Tú eres el entrenador',
-                              style: TextStyle(
-                                  color: color.withOpacity(0.8), fontSize: 11),
-                            ),
-                          ],
-                        ],
-                      ),
+                          overflow: TextOverflow.ellipsis),
                     ],
-                  ),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Icon(Icons.sports_soccer,
+                          size: 12, color: color.withOpacity(0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$jugadores jugador${jugadores == 1 ? '' : 'es'}',
+                        style: TextStyle(
+                            color: color.withOpacity(0.8), fontSize: 11),
+                      ),
+                      if (isEntrenador) ...[
+                        const SizedBox(width: 10),
+                        Icon(Icons.person_pin,
+                            size: 12, color: color.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Text('Tú eres el entrenador',
+                            style: TextStyle(
+                                color: color.withOpacity(0.8), fontSize: 11)),
+                      ],
+                    ]),
+                  ],
                 ),
-                Icon(Icons.chevron_right, color: color.withOpacity(0.5), size: 20),
-              ],
-            ),
+              ),
+              Icon(Icons.chevron_right,
+                  color: color.withOpacity(0.5), size: 20),
+            ]),
           ),
         ),
       ),
     );
   }
 
-  // ── Widgets base ─────────────────────────────────────────────────────────
+  // ── Widgets base ──────────────────────────────────────────────────────────
 
   Widget _buildTextField({
     required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool enabled = true,
-    bool required = true,
-    TextInputType keyboardType = TextInputType.text,
-    List<TextInputFormatter>? inputFormatters,
-    String? Function(String?)? validator,
+    required String                label,
+    required IconData              icon,
+    bool                           enabled          = true,
+    bool                           required         = true,
+    TextInputType                  keyboardType     = TextInputType.text,
+    List<TextInputFormatter>?      inputFormatters,
+    String? Function(String?)?     validator,
   }) {
     return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      style: const TextStyle(color: Colors.white),
-      keyboardType: keyboardType,
+      controller:      controller,
+      enabled:         enabled,
+      style:           const TextStyle(color: Colors.white),
+      keyboardType:    keyboardType,
       inputFormatters: inputFormatters,
       validator: validator ??
               (val) {
@@ -460,16 +400,16 @@ class _UserFormScreenState extends State<UserFormScreen> {
             return null;
           },
       decoration: InputDecoration(
-        labelText: label,
-        labelStyle:
-        TextStyle(color: enabled ? Colors.white70 : Colors.white30),
-        prefixIcon:
-        Icon(icon, color: enabled ? Colors.white70 : Colors.white30),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
-        border: OutlineInputBorder(
+        labelText:   label,
+        labelStyle:  TextStyle(
+            color: enabled ? Colors.white70 : Colors.white30),
+        prefixIcon:  Icon(icon,
+            color: enabled ? Colors.white70 : Colors.white30),
+        filled:      true,
+        fillColor:   Colors.white.withOpacity(0.05),
+        border:      OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none),
+            borderSide:   BorderSide.none),
       ),
     );
   }
@@ -478,31 +418,29 @@ class _UserFormScreenState extends State<UserFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Rol del usuario",
+        const Text('Rol del usuario',
             style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding:    const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color:        Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<UserRole>(
-              value: _selectedRole,
-              dropdownColor: const Color(0xFF0A1A2F),
-              isExpanded: true,
-              style: const TextStyle(color: Colors.white),
-              items: UserRole.values
-                  .map((role) => DropdownMenuItem(
+              value:         _selectedRole,
+              dropdownColor: AppTheme.bg1,
+              isExpanded:    true,
+              style:         const TextStyle(color: Colors.white),
+              items: UserRole.values.map((role) => DropdownMenuItem(
                 value: role,
                 child: Text(role.label.toUpperCase()),
-              ))
-                  .toList(),
+              )).toList(),
               onChanged: (val) {
                 if (val == null) return;
                 setState(() {
-                  _selectedRole = val;
+                  _selectedRole   = val;
                   _equipoAsociado = null;
                 });
                 if (isEditing &&

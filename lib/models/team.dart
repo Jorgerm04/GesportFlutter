@@ -8,6 +8,7 @@ class TeamModel {
   final String? entrenadorNombre;
   final List<String> jugadoresIds;
   final DateTime? createdAt;
+  final String? deporte; // e.g. 'futbol', 'padel', 'baloncesto', 'tenis', 'voley'
 
   const TeamModel({
     required this.id,
@@ -17,6 +18,7 @@ class TeamModel {
     this.entrenadorNombre,
     this.jugadoresIds = const [],
     this.createdAt,
+    this.deporte,
   });
 
   factory TeamModel.fromMap(String id, Map<String, dynamic> data) {
@@ -28,6 +30,7 @@ class TeamModel {
       entrenadorNombre: data['entrenadorNombre'],
       jugadoresIds: List<String>.from(data['jugadoresIds'] ?? []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      deporte:   data['deporte'] as String?,
     );
   }
 
@@ -38,6 +41,7 @@ class TeamModel {
       'entrenadorId': entrenadorId,
       'entrenadorNombre': entrenadorNombre,
       'jugadoresIds': jugadoresIds,
+      'deporte':      deporte,
     };
   }
 
@@ -49,6 +53,7 @@ class TeamModel {
     String? entrenadorNombre,
     List<String>? jugadoresIds,
     DateTime? createdAt,
+    String? deporte,
   }) {
     return TeamModel(
       id: id ?? this.id,
@@ -57,7 +62,8 @@ class TeamModel {
       entrenadorId: entrenadorId ?? this.entrenadorId,
       entrenadorNombre: entrenadorNombre ?? this.entrenadorNombre,
       jugadoresIds: jugadoresIds ?? this.jugadoresIds,
-      createdAt: createdAt ?? this.createdAt,
+      createdAt:   createdAt   ?? this.createdAt,
+      deporte:     deporte     ?? this.deporte,
     );
   }
 }

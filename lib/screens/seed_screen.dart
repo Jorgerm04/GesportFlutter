@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gesport/services/seed_service.dart';
+import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
 
 class SeedScreen extends StatefulWidget {
   const SeedScreen({super.key});
@@ -18,7 +20,8 @@ class _SeedScreenState extends State<SeedScreen> {
   Future<void> _runSeed() async {
     setState(() {
       _isRunning = true;
-      _message = null;
+      _message   = null;
+      _isError   = false;
     });
     try {
       final result = await _service.seedAll();
@@ -34,26 +37,11 @@ class _SeedScreenState extends State<SeedScreen> {
   }
 
   Future<void> _runClear() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0A1A2F),
-        title: const Text('¿Borrar todos los datos?',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Se eliminarán TODOS los documentos de usuarios, pistas, equipos y reservas. Esta acción no se puede deshacer.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Borrar todo',
-                  style: TextStyle(color: Colors.redAccent))),
-        ],
-      ),
+    final confirm = await ConfirmDialog.show(
+      context,
+      title:        '¿Borrar todos los datos?',
+      content:      'Se eliminarán TODOS los documentos de usuarios, pistas, equipos y reservas. Esta acción no se puede deshacer.',
+      confirmLabel: 'Borrar todo',
     );
 
     if (confirm != true) return;
@@ -89,13 +77,7 @@ class _SeedScreenState extends State<SeedScreen> {
       ),
       body: Container(
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -223,7 +205,7 @@ class _SeedScreenState extends State<SeedScreen> {
                           color: Colors.white, fontSize: 15),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0E5CAD),
+                      backgroundColor: AppTheme.primary,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),

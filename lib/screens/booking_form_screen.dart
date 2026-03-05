@@ -6,6 +6,8 @@ import 'package:gesport/models/court.dart';
 import 'package:gesport/models/user.dart';
 import 'package:gesport/services/booking_service.dart';
 import 'package:intl/intl.dart';
+import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/utils/app_utils.dart';
 
 class BookingFormScreen extends StatefulWidget {
   final BookingModel? booking;
@@ -40,14 +42,31 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   // Equipos donde el usuario seleccionado es entrenador (o el admin elige)
   List<Map<String, String>>   _equiposDisponibles = [];
 
-  // Tipo de reserva: individual o de equipo
-  bool _esDeEquipo = false;
+  // Tipo de reserva
+  TipoReserva _tipoReserva = TipoReserva.individual;
+  bool get _esDeEquipo   => _tipoReserva == TipoReserva.equipo;
+  bool get _esPartido    => _tipoReserva == TipoReserva.partido;
+  bool get _esIndividual => _tipoReserva == TipoReserva.individual;
 
-  // Selecciones
+  // Selecciones comunes
   String?    _selectedUserId;
   String?    _selectedUserName;
   String?    _selectedEquipoId;
   String?    _selectedEquipoNombre;
+
+  // Deporte unificado (equipo y partido comparten el mismo selector)
+  String?    _selectedDeporte;
+
+  // Selecciones de partido
+  String?    _equipoLocalId;
+  String?    _equipoLocalNombre;
+  String?    _equipoVisitanteId;
+  String?    _equipoVisitanteNombre;
+  String?    _arbitroId;
+  String?    _arbitroNombre;
+  final _puntosLocalCtrl     = TextEditingController();
+  final _puntosVisitanteCtrl = TextEditingController();
+  List<Map<String, dynamic>> _arbitros = [];
   CourtType? _selectedSport;
   CourtModel? _selectedCourt;
   DateTime?  _selectedDay;
@@ -75,16 +94,25 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
     if (widget.forUserId != null) {
       _isAdminMode      = false;
       _selectedUserId   = widget.forUserId;
-      _selectedUserName = widget.forUserName;
+      _selectedUserName = widget.forUserName ?? '';
     }
 
     if (isEditing) {
       final b = widget.booking!;
       _selectedUserId     = b.usuarioId;
       _selectedUserName   = b.usuarioNombre;
-      _esDeEquipo         = b.esDeEquipo;
-      _selectedEquipoId   = b.equipoId;
+      _tipoReserva          = b.tipo;
+      _selectedEquipoId     = b.equipoId;
       _selectedEquipoNombre = b.equipoNombre;
+      _equipoLocalId        = b.equipoLocalId;
+      _equipoLocalNombre    = b.equipoLocalNombre;
+      _equipoVisitanteId    = b.equipoVisitanteId;
+      _equipoVisitanteNombre = b.equipoVisitanteNombre;
+      _arbitroId            = b.arbitroId;
+      _arbitroNombre        = b.arbitroNombre;
+      _selectedDeporte       = b.deporte;
+      if (b.puntosLocal     != null) _puntosLocalCtrl.text     = b.puntosLocal.toString();
+      if (b.puntosVisitante != null) _puntosVisitanteCtrl.text = b.puntosVisitante.toString();
       _selectedDay        = DateTime(b.fecha.year, b.fecha.month, b.fecha.day);
       _notasCtrl.text     = b.notas ?? '';
     }
@@ -95,6 +123,8 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   @override
   void dispose() {
     _notasCtrl.dispose();
+    _puntosLocalCtrl.dispose();
+    _puntosVisitanteCtrl.dispose();
     super.dispose();
   }
 
@@ -110,12 +140,20 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
     if (!mounted) return;
     setState(() {
-      _usuarios = usersSnap.docs
+      final allUsers = usersSnap.docs
           .map((d) => {
-        'id':   d.id,
+        'id':     d.id,
         'nombre': d.data()['nombre'] ?? '',
-        'rol':  d.data()['rol'] ?? 'jugador',
+        'email':  d.data()['email']  ?? '',
+        'rol':    d.data()['rol']    ?? 'jugador',
       })
+          .toList();
+      _arbitros = allUsers
+          .where((u) => u['rol'] == 'arbitro')
+          .toList();
+      // El selector de usuario individual excluye árbitros
+      _usuarios = allUsers
+          .where((u) => u['rol'] != 'arbitro')
           .toList();
       _allCourts = courtsSnap.docs
           .map((d) => CourtModel.fromMap(d.id, d.data()))
@@ -123,9 +161,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       _isLoading = false;
     });
 
-    // Cargar equipos del usuario seleccionado
-    if (_selectedUserId != null) {
-      await _loadEquiposParaUsuario(_selectedUserId!);
+    // Admin: cargar todos los equipos al iniciar (no depende del usuario)
+    // Entrenador: cargar sus equipos
+    if (_isAdminMode || _selectedUserId != null) {
+      await _loadEquipos();
     }
 
     // Restaurar estado si editamos
@@ -142,15 +181,24 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
   /// Carga los equipos donde el userId es entrenador.
   /// Si es admin, carga TODOS los equipos.
-  Future<void> _loadEquiposParaUsuario(String userId) async {
+  /// En admin: carga TODOS los equipos (sin depender de usuario seleccionado).
+  /// En entrenador: carga solo sus equipos.
+  Future<void> _loadEquipos() async {
     List<Map<String, String>> equipos;
     if (_isAdminMode) {
       final snap = await FirebaseFirestore.instance.collection('equipos').get();
-      equipos = snap.docs
-          .map((d) => {'id': d.id, 'nombre': d.data()['nombre'] as String? ?? ''})
-          .toList();
+      equipos = snap.docs.map((d) {
+        final data = d.data();
+        return {
+          'id':               d.id,
+          'nombre':           data['nombre']           as String? ?? '',
+          'entrenadorId':     data['entrenadorId']     as String? ?? '',
+          'entrenadorNombre': data['entrenadorNombre'] as String? ?? '',
+          'deporte':          data['deporte']          as String? ?? '',
+        };
+      }).toList();
     } else {
-      equipos = await _service.getEquiposComoEntrenador(userId);
+      equipos = await _service.getEquiposComoEntrenador(_selectedUserId!);
     }
     if (mounted) setState(() => _equiposDisponibles = equipos);
   }
@@ -196,9 +244,11 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
         }
       }
 
+      final isPast = end.isBefore(DateTime.now());
       slots.add(_TimeSlot(
         inicio: current, fin: end,
         occupied: occupied, occupiedBy: occupiedBy,
+        isPast: isPast,
       ));
       current = end;
     }
@@ -208,16 +258,20 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
   Future<void> _pickDay() async {
     final now    = DateTime.now();
+    final minDay = DateTime(now.year, now.month, now.day);
+    final maxDay = _isAdminMode
+        ? minDay.add(const Duration(days: 365))
+        : minDay.add(const Duration(days: 15));
     final picked = await showDatePicker(
       context:     context,
-      initialDate: _selectedDay ?? now,
-      firstDate:   now,
-      lastDate:    now.add(const Duration(days: 90)),
+      initialDate: _selectedDay ?? minDay,
+      firstDate:   minDay,
+      lastDate:    maxDay,
       builder:     (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: const ColorScheme.dark(
             primary: Color(0xFF0E5CAD),
-            surface: Color(0xFF0A1A2F),
+            surface: AppTheme.bg1,
           ),
         ),
         child: child!,
@@ -232,15 +286,22 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   }
 
   Future<void> _save() async {
-    if (_selectedUserId == null) {
-      _showError('Selecciona un usuario'); return;
+    // Validaciones por tipo
+    if (_esPartido) {
+      if (_selectedDeporte == null)      { _showError('Selecciona el deporte'); return; }
+      if (_equipoLocalId == null)       { _showError('Selecciona el equipo local'); return; }
+      if (_equipoVisitanteId == null)   { _showError('Selecciona el equipo visitante'); return; }
+      if (_equipoLocalId == _equipoVisitanteId) {
+        _showError('El equipo local y visitante no pueden ser el mismo'); return;
+      }
+      if (_arbitroId == null)           { _showError('Selecciona un árbitro'); return; }
+    } else {
+      if (_isAdminMode && _selectedUserId == null) { _showError('Selecciona un usuario'); return; }
+      if (_esDeEquipo && _selectedEquipoId == null) {
+        _showError('Selecciona un equipo'); return;
+      }
     }
-    if (_esDeEquipo && _selectedEquipoId == null) {
-      _showError('Selecciona un equipo'); return;
-    }
-    if (_selectedCourt == null) {
-      _showError('Selecciona una pista'); return;
-    }
+    if (_selectedCourt == null)         { _showError('Selecciona una pista'); return; }
     if (_selectedDay == null || _selectedSlotIndex == null) {
       _showError('Selecciona un horario disponible'); return;
     }
@@ -251,20 +312,42 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
     setState(() => _isSaving = true);
     try {
       final booking = BookingModel(
-        id:            isEditing ? widget.booking!.id : '',
-        usuarioId:     _selectedUserId!,
-        usuarioNombre: _selectedUserName!,
-        pistaId:       _selectedCourt!.id,
-        pistaNombre:   _selectedCourt!.nombre,
-        fecha:         _selectedDay!,
-        horaInicio:    slot.inicio,
-        horaFin:       slot.fin,
-        cancelada:     isEditing ? widget.booking!.cancelada : false,
-        notas:         _notasCtrl.text.trim().isEmpty
+        id:                    isEditing ? widget.booking!.id : '',
+        usuarioId:             _esPartido ? ''
+            : _isAdminMode
+            ? (_selectedUserId   ?? '')
+            : (widget.forUserId  ?? ''),
+        usuarioNombre:         _esPartido ? ''
+            : _isAdminMode
+            ? (_selectedUserName ?? '')
+            : (widget.forUserName ?? ''),
+        pistaId:               _selectedCourt!.id,
+        pistaNombre:           _selectedCourt!.nombre,
+        fecha:                 _selectedDay!,
+        horaInicio:            slot.inicio,
+        horaFin:               slot.fin,
+        cancelada:             isEditing ? widget.booking!.cancelada : false,
+        notas:                 _notasCtrl.text.trim().isEmpty
             ? null : _notasCtrl.text.trim(),
-        creadaPorAdminId: _isAdminMode ? 'admin' : null,
-        equipoId:      _esDeEquipo ? _selectedEquipoId   : null,
-        equipoNombre:  _esDeEquipo ? _selectedEquipoNombre : null,
+        creadaPorAdminId:      'admin',
+        tipo:                  _tipoReserva,
+        // Equipo
+        equipoId:              _esDeEquipo ? _selectedEquipoId     : null,
+        equipoNombre:          _esDeEquipo ? _selectedEquipoNombre : null,
+        // Partido
+        equipoLocalId:         _esPartido ? _equipoLocalId         : null,
+        equipoLocalNombre:     _esPartido ? _equipoLocalNombre     : null,
+        equipoVisitanteId:     _esPartido ? _equipoVisitanteId     : null,
+        equipoVisitanteNombre: _esPartido ? _equipoVisitanteNombre : null,
+        arbitroId:             _esPartido ? _arbitroId             : null,
+        arbitroNombre:         _esPartido ? _arbitroNombre         : null,
+        deporte:               _esPartido ? _selectedDeporte        : null,
+        puntosLocal:           _esPartido && _puntosLocalCtrl.text.isNotEmpty
+            ? int.tryParse(_puntosLocalCtrl.text)
+            : null,
+        puntosVisitante:       _esPartido && _puntosVisitanteCtrl.text.isNotEmpty
+            ? int.tryParse(_puntosVisitanteCtrl.text)
+            : null,
       );
 
       if (isEditing) {
@@ -295,7 +378,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   Widget build(BuildContext context) {
     // Determinar si el usuario actual puede hacer reservas de equipo:
     // admin siempre, entrenador si tiene equipos
-    final puedeHacerEquipo = _isAdminMode ||
+    final puedeMultiTipo = _isAdminMode ||
         (widget.forUserRole == UserRole.entrenador &&
             _equiposDisponibles.isNotEmpty);
 
@@ -310,13 +393,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       ),
       body: Container(
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin:  Alignment.topCenter,
-            end:    Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: _isLoading
               ? const Center(
@@ -327,59 +404,122 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                // ── PASO 0: Usuario (solo admin) ─────────
-                if (_isAdminMode) ...[
-                  _stepHeader('1', 'Usuario', Icons.person,
-                      Colors.blueAccent,
+                // ── PASO 1: Tipo de reserva (admin y entrenador con equipos) ──
+                if (puedeMultiTipo) ...[
+                  _stepHeader('1', 'Tipo de reserva', Icons.category,
+                      Colors.tealAccent, done: true),
+                  const SizedBox(height: 10),
+                  _buildTipoToggle(),
+                  const SizedBox(height: 24),
+                ],
+
+                // ── PASO 2a: Usuario (admin + individual) ────────────
+                if (_isAdminMode && !_esDeEquipo && !_esPartido) ...[
+                  _stepHeader(
+                      puedeMultiTipo ? '2' : '1',
+                      'Usuario', Icons.person, Colors.blueAccent,
                       done: _selectedUserId != null),
                   const SizedBox(height: 10),
                   _buildUserDropdown(),
                   const SizedBox(height: 24),
                 ],
 
-                // ── TIPO DE RESERVA ──────────────────────
-                if (puedeHacerEquipo) ...[
-                  _stepHeader(
-                      _isAdminMode ? '2' : '1',
-                      'Tipo de reserva', Icons.category,
-                      Colors.tealAccent,
-                      done: true),
-                  const SizedBox(height: 10),
-                  _buildTipoToggle(),
-                  const SizedBox(height: 24),
-
-                  // ── Selector de equipo ───────────────
-                  if (_esDeEquipo) ...[
-                    _stepHeader(
-                        _isAdminMode ? '3' : '2',
-                        'Equipo', Icons.groups,
-                        Colors.cyanAccent,
-                        done: _selectedEquipoId != null,
-                        locked: _selectedUserId == null && _isAdminMode),
-                    const SizedBox(height: 10),
-                    if (_equiposDisponibles.isEmpty)
-                      _lockedHint(
-                          _isAdminMode && _selectedUserId == null
-                              ? 'Selecciona un usuario primero'
-                              : 'No hay equipos disponibles')
-                    else
-                      _buildEquipoSelector(),
-                    const SizedBox(height: 24),
-                  ],
-                ],
-
-                // ── DEPORTE ──────────────────────────────
+                // ── PASO 2: Deporte (todos los tipos) ─────────────
                 _stepHeader(
-                    _stepNum(puedeHacerEquipo, 'deporte'),
+                    _esIndividual
+                        ? (puedeMultiTipo ? '3' : '2')
+                        : '2',
                     'Deporte', Icons.sports, Colors.purpleAccent,
-                    done: _selectedSport != null),
+                    done: _selectedDeporte != null),
                 const SizedBox(height: 10),
                 _buildSportSelector(),
                 const SizedBox(height: 24),
 
+                // ── PASO 3: Equipo (reserva equipo) ──────────────
+                if (_esDeEquipo) ...[
+                  _stepHeader('3', 'Equipo', Icons.groups,
+                      Colors.cyanAccent,
+                      done:   _selectedEquipoId != null,
+                      locked: _selectedDeporte == null),
+                  const SizedBox(height: 10),
+                  if (_selectedDeporte == null)
+                    _lockedHint('Selecciona un deporte primero')
+                  else if (_equiposFiltrados.isEmpty)
+                    _lockedHint('No hay equipos de este deporte')
+                  else
+                    _buildEquipoSelector(),
+                  const SizedBox(height: 24),
+                ],
+
+                // ── PASOS partido ─────────────────────────
+                if (_esPartido) ...[
+
+                  // Equipo local
+                  _stepHeader('3', 'Equipo local', Icons.home,
+                      Colors.blueAccent,
+                      done:   _equipoLocalId != null,
+                      locked: _selectedDeporte == null),
+                  const SizedBox(height: 10),
+                  if (_selectedDeporte == null)
+                    _lockedHint('Selecciona un deporte primero')
+                  else if (_equiposFiltrados.isEmpty)
+                    _lockedHint('No hay equipos de este deporte')
+                  else
+                    _buildEquipoPartidoSelector(
+                      isLocal: true,
+                      selectedId: _equipoLocalId,
+                      selectedNombre: _equipoLocalNombre,
+                      onSelect: (id, nombre) => setState(() {
+                        _equipoLocalId     = id;
+                        _equipoLocalNombre = nombre;
+                      }),
+                    ),
+                  const SizedBox(height: 24),
+
+                  // Equipo visitante
+                  _stepHeader('4', 'Equipo visitante', Icons.flight_land,
+                      Colors.orangeAccent,
+                      done:   _equipoVisitanteId != null,
+                      locked: _selectedDeporte == null),
+                  const SizedBox(height: 10),
+                  if (_selectedDeporte == null)
+                    _lockedHint('Selecciona un deporte primero')
+                  else if (_equiposFiltrados.isEmpty)
+                    _lockedHint('No hay equipos de este deporte')
+                  else
+                    _buildEquipoPartidoSelector(
+                      isLocal: false,
+                      selectedId: _equipoVisitanteId,
+                      selectedNombre: _equipoVisitanteNombre,
+                      onSelect: (id, nombre) => setState(() {
+                        _equipoVisitanteId     = id;
+                        _equipoVisitanteNombre = nombre;
+                      }),
+                    ),
+                  const SizedBox(height: 24),
+
+                  // Árbitro
+                  _stepHeader('5', 'Árbitro', Icons.sports_handball,
+                      Colors.yellowAccent,
+                      done: _arbitroId != null),
+                  const SizedBox(height: 10),
+                  _buildArbitroSelector(),
+                  const SizedBox(height: 24),
+
+                  // Puntos (opcionales)
+                  _stepHeader('', 'Resultado (opcional)',
+                      Icons.scoreboard, Colors.white38,
+                      done: _puntosLocalCtrl.text.isNotEmpty ||
+                          _puntosVisitanteCtrl.text.isNotEmpty),
+                  const SizedBox(height: 10),
+                  _buildPuntosRow(),
+                  const SizedBox(height: 24),
+                ],
+
+
                 // ── PISTA ────────────────────────────────
                 _stepHeader(
-                    _stepNum(puedeHacerEquipo, 'pista'),
+                    _stepNum(puedeMultiTipo, 'pista'),
                     'Pista', Icons.stadium, Colors.redAccent,
                     done:   _selectedCourt != null,
                     locked: _selectedSport == null),
@@ -395,7 +535,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
                 // ── DÍA ──────────────────────────────────
                 _stepHeader(
-                    _stepNum(puedeHacerEquipo, 'dia'),
+                    _stepNum(puedeMultiTipo, 'dia'),
                     'Día', Icons.calendar_today, Colors.orangeAccent,
                     done:   _selectedDay != null,
                     locked: _selectedCourt == null),
@@ -408,7 +548,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
                 // ── HORARIO ───────────────────────────────
                 _stepHeader(
-                    _stepNum(puedeHacerEquipo, 'horario'),
+                    _stepNum(puedeMultiTipo, 'horario'),
                     'Horario', Icons.schedule, Colors.greenAccent,
                     done:   _selectedSlotIndex != null,
                     locked: _selectedDay == null),
@@ -444,7 +584,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                   child:  ElevatedButton(
                     onPressed: _isSaving ? null : _save,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0E5CAD),
+                      backgroundColor: AppTheme.primary,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
@@ -466,57 +606,78 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
   // ── Número de paso dinámico ───────────────────────────────────────────────
 
-  String _stepNum(bool puedeEquipo, String paso) {
-    // Pasos base cuando no hay modo equipo visible
-    final baseMap = {
-      'deporte': _isAdminMode ? '2' : '1',
-      'pista':   _isAdminMode ? '3' : '2',
-      'dia':     _isAdminMode ? '4' : '3',
-      'horario': _isAdminMode ? '5' : '4',
-    };
-    // Pasos cuando hay toggle de equipo (y posible selector de equipo)
-    final equipoMap = {
-      'deporte': _isAdminMode
-          ? (_esDeEquipo ? '4' : '3')
-          : (_esDeEquipo ? '3' : '2'),
-      'pista':   _isAdminMode
-          ? (_esDeEquipo ? '5' : '4')
-          : (_esDeEquipo ? '4' : '3'),
-      'dia':     _isAdminMode
-          ? (_esDeEquipo ? '6' : '5')
-          : (_esDeEquipo ? '5' : '4'),
-      'horario': _isAdminMode
-          ? (_esDeEquipo ? '7' : '6')
-          : (_esDeEquipo ? '6' : '5'),
-    };
-    return puedeEquipo ? equipoMap[paso]! : baseMap[paso]!;
+  String _stepNum(bool puedeMultiTipo, String paso) {
+    if (_esPartido) {
+      // Partido: 2=deporte 3=local 4=visitante 5=arbitro 6=resultado → pista=7 dia=8 horario=9
+      const m = {'deporte': '7', 'pista': '7', 'dia': '8', 'horario': '9'};
+      return m[paso]!;
+    }
+    if (!puedeMultiTipo) {
+      // Solo jugador sin equipos: sin toggle
+      const m = {'deporte': '1', 'pista': '2', 'dia': '3', 'horario': '4'};
+      return m[paso]!;
+    }
+    // Admin o entrenador con equipos
+    if (_isAdminMode) {
+      if (_esDeEquipo) {
+        const m = {'deporte': '4', 'pista': '5', 'dia': '6', 'horario': '7'};
+        return m[paso]!;
+      }
+      const m = {'deporte': '3', 'pista': '4', 'dia': '5', 'horario': '6'};
+      return m[paso]!;
+    }
+    if (_esDeEquipo) {
+      const m = {'deporte': '3', 'pista': '4', 'dia': '5', 'horario': '6'};
+      return m[paso]!;
+    }
+    const m = {'deporte': '2', 'pista': '3', 'dia': '4', 'horario': '5'};
+    return m[paso]!;
   }
 
   // ── Toggle tipo reserva ───────────────────────────────────────────────────
 
   Widget _buildTipoToggle() {
-    return Row(children: [
-      _tipoChip('Individual', Icons.person, !_esDeEquipo, () {
-        setState(() {
-          _esDeEquipo           = false;
-          _selectedEquipoId     = null;
-          _selectedEquipoNombre = null;
-        });
-      }),
-      const SizedBox(width: 10),
-      _tipoChip('Equipo', Icons.groups, _esDeEquipo, () async {
-        setState(() {
-          _esDeEquipo           = true;
-          _selectedEquipoId     = null;
-          _selectedEquipoNombre = null;
-        });
-        // Si el admin ya eligió usuario, cargar sus equipos
-        if (_isAdminMode && _selectedUserId != null) {
-          await _loadEquiposParaUsuario(_selectedUserId!);
-        }
-      }),
+    return Wrap(spacing: 10, runSpacing: 10, children: [
+      _tipoChip('Individual', Icons.person,
+          _tipoReserva == TipoReserva.individual, () {
+            setState(() {
+              _tipoReserva             = TipoReserva.individual;
+              _selectedEquipoId        = null;
+              _selectedEquipoNombre    = null;
+              _selectedDeporte   = null;
+              if (_isAdminMode) {
+                _selectedUserId   = null;
+                _selectedUserName = null;
+              }
+            });
+          }),
+      _tipoChip('Equipo', Icons.groups,
+          _tipoReserva == TipoReserva.equipo, () async {
+            setState(() {
+              _tipoReserva          = TipoReserva.equipo;
+              _selectedEquipoId     = null;
+              _selectedEquipoNombre = null;
+              _selectedUserId       = null;
+              _selectedUserName     = null;
+            });
+            await _loadEquipos();
+          }),
+      if (_isAdminMode)
+        _tipoChip('Partido', Icons.sports,
+            _tipoReserva == TipoReserva.partido, () async {
+              setState(() {
+                _tipoReserva           = TipoReserva.partido;
+                _selectedUserId        = null;
+                _selectedUserName      = null;
+                _selectedEquipoId      = null;
+                _selectedEquipoNombre  = null;
+                _selectedDeporte = null;
+              });
+              await _loadEquipos();
+            }),
     ]);
   }
+
 
   Widget _tipoChip(String label, IconData icon, bool selected, VoidCallback onTap) {
     final color = selected ? Colors.tealAccent : Colors.white38;
@@ -551,71 +712,549 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
   // ── Selector de equipo ────────────────────────────────────────────────────
 
-  Widget _buildEquipoSelector() {
-    return Column(
-      children: _equiposDisponibles.map((eq) {
-        final selected = _selectedEquipoId == eq['id'];
-        return GestureDetector(
-          onTap: () => setState(() {
-            _selectedEquipoId     = eq['id'];
-            _selectedEquipoNombre = eq['nombre'];
-          }),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            margin:   const EdgeInsets.only(bottom: 10),
-            padding:  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: selected
-                  ? Colors.cyanAccent.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected
-                    ? Colors.cyanAccent
-                    : Colors.white.withOpacity(0.08),
-                width: selected ? 1.5 : 1,
+
+  // ── Equipos filtrados por deporte (equipo y partido) ─────────────────────
+
+  List<Map<String, String>> get _equiposFiltrados {
+    if (_selectedDeporte == null) return [];
+    return _equiposDisponibles
+        .where((e) => e['deporte'] == _selectedDeporte)
+        .toList();
+  }
+
+
+
+  // ── Selector equipo local/visitante ───────────────────────────────────────
+
+  Widget _buildEquipoPartidoSelector({
+    required bool     isLocal,
+    required String?  selectedId,
+    required String?  selectedNombre,
+    required void Function(String id, String nombre) onSelect,
+  }) {
+    final color = isLocal ? Colors.blueAccent : Colors.orangeAccent;
+    return GestureDetector(
+      onTap: () => _showEquipoPartidoSheet(
+          isLocal: isLocal, onSelect: onSelect,
+          excludeId: isLocal ? _equipoVisitanteId : _equipoLocalId),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selectedId != null
+              ? color.withOpacity(0.1)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selectedId != null
+                ? color.withOpacity(0.4)
+                : Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Row(children: [
+          Icon(isLocal ? Icons.home : Icons.flight_land,
+              color: selectedId != null ? color : Colors.white38, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              selectedNombre ??
+                  (isLocal
+                      ? 'Toca para seleccionar equipo local'
+                      : 'Toca para seleccionar equipo visitante'),
+              style: TextStyle(
+                  color:    selectedId != null ? Colors.white : Colors.white38,
+                  fontSize: 14),
+            ),
+          ),
+          Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _showEquipoPartidoSheet({
+    required bool     isLocal,
+    required void Function(String, String) onSelect,
+    String? excludeId,
+  }) async {
+    final color = isLocal ? Colors.blueAccent : Colors.orangeAccent;
+    final titulo = isLocal ? 'Equipo local' : 'Equipo visitante';
+    final disponibles = _equiposFiltrados
+        .where((e) => e['id'] != excludeId)
+        .toList();
+
+    await showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    AppTheme.modalBg,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize:     0.4,
+        maxChildSize:     0.9,
+        expand: false,
+        builder: (_, sc) => Column(children: [
+          const SizedBox(height: 12),
+          Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          Text(titulo, style: const TextStyle(color: Colors.white,
+              fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView(
+              controller: sc,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: disponibles.map((eq) {
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onSelect(eq['id']!, eq['nombre']!);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color:        color.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(12),
+                      border:       Border.all(color: color.withOpacity(0.2)),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        width: 42, height: 42,
+                        decoration: BoxDecoration(
+                          color:        color.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.groups, color: color, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(eq['nombre']!,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
+                            if ((eq['entrenadorNombre'] ?? '').isNotEmpty)
+                              Text(eq['entrenadorNombre']!,
+                                  style: const TextStyle(
+                                      color: Colors.white38, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ]),
+      ),
+    );
+  }
+
+  // ── Selector árbitro ──────────────────────────────────────────────────────
+
+  Widget _buildArbitroSelector() {
+    return GestureDetector(
+      onTap: () => _showArbitroSheet(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _arbitroId != null
+              ? Colors.yellowAccent.withOpacity(0.08)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _arbitroId != null
+                ? Colors.yellowAccent.withOpacity(0.4)
+                : Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Row(children: [
+          Icon(Icons.sports_handball,
+              color: _arbitroId != null ? Colors.yellowAccent : Colors.white38,
+              size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _arbitroNombre ?? 'Toca para seleccionar un árbitro',
+              style: TextStyle(
+                  color:    _arbitroId != null ? Colors.white : Colors.white38,
+                  fontSize: 14),
+            ),
+          ),
+          Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _showArbitroSheet() async {
+    final searchCtrl = TextEditingController();
+    String query = '';
+
+    await showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    AppTheme.modalBg,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize:     0.4,
+          maxChildSize:     0.9,
+          expand: false,
+          builder: (_, sc) => Column(children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            const Text('Selecciona un árbitro',
+                style: TextStyle(color: Colors.white, fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: searchCtrl,
+                autofocus:  true,
+                style:      const TextStyle(color: Colors.white),
+                onChanged:  (v) => setModal(() => query = v.toLowerCase()),
+                decoration: InputDecoration(
+                  hintText:   'Buscar árbitro...',
+                  hintStyle:  const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  filled:     true,
+                  fillColor:  Colors.white.withOpacity(0.07),
+                  border:     OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:   BorderSide.none),
+                ),
               ),
             ),
-            child: Row(children: [
-              Icon(Icons.groups,
-                  color: selected ? Colors.cyanAccent : Colors.white38,
-                  size:  22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(eq['nombre']!,
-                    style: TextStyle(
-                        color:      selected ? Colors.white : Colors.white70,
-                        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                        fontSize:   14)),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                controller: sc,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: _arbitros
+                    .where((a) =>
+                query.isEmpty ||
+                    (a['nombre'] as String).toLowerCase().contains(query))
+                    .map((a) {
+                  final isSelected = _arbitroId == a['id'];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        _arbitroId     = a['id'];
+                        _arbitroNombre = a['nombre'];
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.yellowAccent.withOpacity(0.1)
+                            : Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.yellowAccent
+                              : Colors.white.withOpacity(0.07),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(children: [
+                        CircleAvatar(
+                          radius:          18,
+                          backgroundColor: Colors.yellowAccent.withOpacity(0.15),
+                          child: Icon(Icons.sports_handball,
+                              color: Colors.yellowAccent, size: 16),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(a['nombre'] as String,
+                              style: TextStyle(
+                                  color:      isSelected ? Colors.white : Colors.white70,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  fontSize:   14)),
+                        ),
+                        if (isSelected)
+                          const Icon(Icons.check_circle,
+                              color: Colors.yellowAccent, size: 18),
+                      ]),
+                    ),
+                  );
+                }).toList(),
               ),
-              if (selected)
-                const Icon(Icons.check_circle,
-                    color: Colors.cyanAccent, size: 18),
-            ]),
+            ),
+            const SizedBox(height: 16),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  // ── Puntos ────────────────────────────────────────────────────────────────
+
+  Widget _buildPuntosRow() {
+    return Row(children: [
+      Expanded(child: _buildPuntosField(
+          ctrl:  _puntosLocalCtrl,
+          label: 'Pts. local',
+          color: Colors.blueAccent)),
+      const SizedBox(width: 12),
+      const Text('–', style: TextStyle(color: Colors.white38, fontSize: 20)),
+      const SizedBox(width: 12),
+      Expanded(child: _buildPuntosField(
+          ctrl:  _puntosVisitanteCtrl,
+          label: 'Pts. visitante',
+          color: Colors.orangeAccent)),
+    ]);
+  }
+
+  Widget _buildPuntosField({
+    required TextEditingController ctrl,
+    required String label,
+    required Color color,
+  }) {
+    return TextField(
+      controller:   ctrl,
+      keyboardType: TextInputType.number,
+      style:        const TextStyle(color: Colors.white, fontSize: 18,
+          fontWeight: FontWeight.bold),
+      textAlign:    TextAlign.center,
+      decoration:   InputDecoration(
+        labelText:   label,
+        labelStyle:  TextStyle(color: color.withOpacity(0.7), fontSize: 12),
+        filled:      true,
+        fillColor:   color.withOpacity(0.08),
+        border:      OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide:   BorderSide(color: color.withOpacity(0.3))),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide:   BorderSide(color: color.withOpacity(0.3))),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide:   BorderSide(color: color)),
+      ),
+      onChanged: (_) => setState(() {}),
+    );
+  }
+
+  Widget _buildEquipoSelector() {
+    return GestureDetector(
+      onTap: () => _showEquipoPickerSheet(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _selectedEquipoId != null
+              ? Colors.cyanAccent.withOpacity(0.1)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _selectedEquipoId != null
+                ? Colors.cyanAccent.withOpacity(0.4)
+                : Colors.white.withOpacity(0.08),
           ),
-        );
-      }).toList(),
+        ),
+        child: Row(children: [
+          Icon(Icons.groups,
+              color: _selectedEquipoId != null
+                  ? Colors.cyanAccent
+                  : Colors.white38,
+              size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _selectedEquipoNombre ?? 'Toca para seleccionar un equipo',
+                  style: TextStyle(
+                      color:    _selectedEquipoId != null
+                          ? Colors.white
+                          : Colors.white38,
+                      fontSize: 14),
+                ),
+                if (_selectedEquipoId != null &&
+                    _selectedUserName != null) ...[
+                  const SizedBox(height: 2),
+                  Row(children: [
+                    const Icon(Icons.person_pin,
+                        color: Colors.cyanAccent, size: 12),
+                    const SizedBox(width: 4),
+                    Text(_selectedUserName!,
+                        style: const TextStyle(
+                            color:    Colors.cyanAccent,
+                            fontSize: 11)),
+                  ]),
+                ],
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _showEquipoPickerSheet() async {
+    await showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    AppTheme.modalBg,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize:     0.4,
+        maxChildSize:     0.9,
+        expand: false,
+        builder: (_, scrollCtrl) => Column(children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          const Text('Selecciona un equipo',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView(
+              controller: scrollCtrl,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: (_esDeEquipo ? _equiposFiltrados : _equiposDisponibles).map((eq) {
+                final isSelected = _selectedEquipoId == eq['id'];
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _selectedEquipoId     = eq['id'];
+                      _selectedEquipoNombre = eq['nombre'];
+                      _selectedUserId       = eq['entrenadorId'];
+                      _selectedUserName     = eq['entrenadorNombre'];
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.cyanAccent.withOpacity(0.12)
+                          : Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.cyanAccent
+                            : Colors.white.withOpacity(0.08),
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        width: 42, height: 42,
+                        decoration: BoxDecoration(
+                          color:        Colors.cyanAccent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.groups,
+                            color: Colors.cyanAccent, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(eq['nombre']!,
+                                style: TextStyle(
+                                    color:      isSelected ? Colors.white : Colors.white70,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    fontSize:   14)),
+                            if ((eq['entrenadorNombre'] ?? '').isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Row(children: [
+                                const Icon(Icons.person_pin,
+                                    color: Colors.white38, size: 12),
+                                const SizedBox(width: 4),
+                                Text(eq['entrenadorNombre']!,
+                                    style: const TextStyle(
+                                        color:    Colors.white38,
+                                        fontSize: 11)),
+                              ]),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(Icons.check_circle,
+                            color: Colors.cyanAccent, size: 18),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ]),
+      ),
     );
   }
 
   // ── Selector de deporte ───────────────────────────────────────────────────
 
   Widget _buildSportSelector() {
-    final availableSports = CourtType.values
-        .where((t) => _allCourts.any((c) => c.tipo == t && c.activa))
-        .toList();
+    // Individual: solo deportes con pistas activas disponibles
+    // Equipo / Partido: todos los deportes (sin filtrar por pistas)
+    final sports = _esIndividual
+        ? CourtType.values
+        .where((t) =>
+    t != CourtType.otro &&
+        _allCourts.any((c) => c.tipo == t && c.activa))
+        .toList()
+        : CourtType.values.where((t) => t != CourtType.otro).toList();
 
     return Wrap(
       spacing: 10, runSpacing: 10,
-      children: availableSports.map((sport) {
+      children: sports.map((sport) {
         final selected = _selectedSport == sport;
         return GestureDetector(
           onTap: () => setState(() {
-            _selectedSport     = sport;
+            _selectedSport   = sport;
+            _selectedDeporte = sport.name; // sincroniza filtro equipos
+            // Resetear selecciones dependientes
             _selectedCourt     = null;
             _selectedDay       = null;
             _selectedSlotIndex = null;
             _slots             = [];
+            _selectedEquipoId      = null;
+            _selectedEquipoNombre  = null;
+            if (_esIndividual) {
+              _selectedUserId   = null;
+              _selectedUserName = null;
+            }
+            _equipoLocalId         = null;
+            _equipoLocalNombre     = null;
+            _equipoVisitanteId     = null;
+            _equipoVisitanteNombre = null;
           }),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
@@ -626,7 +1265,9 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                   : Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: selected ? Colors.purpleAccent : Colors.white.withOpacity(0.1),
+                color: selected
+                    ? Colors.purpleAccent
+                    : Colors.white.withOpacity(0.1),
                 width: selected ? 1.5 : 1,
               ),
             ),
@@ -653,12 +1294,16 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       children: _courtsForSport.map((court) {
         final selected = _selectedCourt?.id == court.id;
         return GestureDetector(
-          onTap: () => setState(() {
-            _selectedCourt     = court;
-            _selectedDay       = null;
-            _selectedSlotIndex = null;
-            _slots             = [];
-          }),
+          onTap: () {
+            final today = DateTime.now();
+            setState(() {
+              _selectedCourt     = court;
+              _selectedDay       = DateTime(today.year, today.month, today.day);
+              _selectedSlotIndex = null;
+              _slots             = [];
+            });
+            _loadSlots();
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             margin:   const EdgeInsets.only(bottom: 10),
@@ -707,39 +1352,107 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   // ── Selector de día ───────────────────────────────────────────────────────
 
   Widget _buildDayPicker() {
-    final fmt = DateFormat('EEEE d \'de\' MMMM', 'es');
-    return GestureDetector(
-      onTap: _pickDay,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: _selectedDay != null
-              ? Colors.orangeAccent.withOpacity(0.1)
-              : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _selectedDay != null
-                ? Colors.orangeAccent.withOpacity(0.4)
-                : Colors.white.withOpacity(0.08),
+    final fmt     = DateFormat('EEEE d \'de\' MMMM', 'es');
+    final today   = DateTime.now();
+    final minDay  = DateTime(today.year, today.month, today.day);
+    final maxDay  = _isAdminMode
+        ? minDay.add(const Duration(days: 365))
+        : minDay.add(const Duration(days: 15));
+
+    final canGoPrev = _selectedDay != null &&
+        _selectedDay!.isAfter(minDay);
+    final canGoNext = _selectedDay != null &&
+        _selectedDay!.isBefore(maxDay);
+
+    return Row(children: [
+      // Flecha izquierda
+      _dayArrowButton(
+        icon:    Icons.chevron_left,
+        enabled: canGoPrev,
+        onTap: () {
+          final prev = _selectedDay!.subtract(const Duration(days: 1));
+          setState(() {
+            _selectedDay       = prev;
+            _selectedSlotIndex = null;
+            _slots             = [];
+          });
+          _loadSlots();
+        },
+      ),
+      const SizedBox(width: 8),
+
+      // Selector central (toca para abrir calendario)
+      Expanded(
+        child: GestureDetector(
+          onTap: _pickDay,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.orangeAccent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: Colors.orangeAccent.withOpacity(0.4)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.calendar_today,
+                  color: Colors.orangeAccent, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  capitalize(fmt.format(_selectedDay!)),
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ]),
           ),
         ),
-        child: Row(children: [
-          Icon(Icons.calendar_today,
-              color: _selectedDay != null ? Colors.orangeAccent : Colors.white38,
-              size:  20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _selectedDay != null
-                  ? _capitalize(fmt.format(_selectedDay!))
-                  : 'Toca para seleccionar el día',
-              style: TextStyle(
-                  color:    _selectedDay != null ? Colors.white : Colors.white38,
-                  fontSize: 14),
-            ),
+      ),
+
+      const SizedBox(width: 8),
+      // Flecha derecha
+      _dayArrowButton(
+        icon:    Icons.chevron_right,
+        enabled: canGoNext,
+        onTap: () {
+          final next = _selectedDay!.add(const Duration(days: 1));
+          setState(() {
+            _selectedDay       = next;
+            _selectedSlotIndex = null;
+            _slots             = [];
+          });
+          _loadSlots();
+        },
+      ),
+    ]);
+  }
+
+  Widget _dayArrowButton({
+    required IconData  icon,
+    required bool      enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width:  42,
+        height: 48,
+        decoration: BoxDecoration(
+          color: enabled
+              ? Colors.orangeAccent.withOpacity(0.12)
+              : Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: enabled
+                ? Colors.orangeAccent.withOpacity(0.4)
+                : Colors.white.withOpacity(0.06),
           ),
-          const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
-        ]),
+        ),
+        child: Icon(icon,
+            color: enabled ? Colors.orangeAccent : Colors.white12,
+            size:  22),
       ),
     );
   }
@@ -767,7 +1480,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
         Row(children: [
           _legendDot(Colors.greenAccent, 'Disponible'),
           const SizedBox(width: 16),
-          _legendDot(Colors.redAccent, 'Ocupado'),
+          _legendDot(Colors.redAccent, 'Ocupado / Pasado'),
         ]),
         const SizedBox(height: 12),
         GridView.builder(
@@ -781,45 +1494,54 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
           itemBuilder: (_, i) {
             final slot       = _slots[i];
             final isSelected = _selectedSlotIndex == i;
-            final color      = slot.occupied ? Colors.redAccent : Colors.greenAccent;
+            final isBlocked  = slot.occupied || slot.isPast;
+            final color = isBlocked ? Colors.redAccent : Colors.greenAccent;
+
             return GestureDetector(
-              onTap: slot.occupied
-                  ? () => _showOccupiedInfo(slot)
+              onTap: isBlocked
+                  ? (slot.occupied ? () => _showOccupiedInfo(slot) : null)
                   : () => setState(() => _selectedSlotIndex = i),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? Colors.greenAccent.withOpacity(0.25)
-                      : slot.occupied
-                      ? Colors.redAccent.withOpacity(0.12)
+                      : isBlocked
+                      ? Colors.redAccent.withOpacity(0.10)
                       : Colors.greenAccent.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: isSelected
                         ? Colors.greenAccent
-                        : slot.occupied
-                        ? Colors.redAccent.withOpacity(0.5)
+                        : isBlocked
+                        ? Colors.redAccent.withOpacity(0.4)
                         : Colors.greenAccent.withOpacity(0.3),
                     width: isSelected ? 2 : 1,
                   ),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(timeFmt.format(slot.inicio),
-                        style: TextStyle(
-                            color:      isSelected ? Colors.greenAccent : color,
-                            fontSize:   13, fontWeight: FontWeight.bold)),
-                    Text(timeFmt.format(slot.fin),
-                        style: TextStyle(
-                            color:    (isSelected ? Colors.greenAccent : color)
-                                .withOpacity(0.7),
-                            fontSize: 11)),
-                    if (isSelected)
-                      const Icon(Icons.check_circle,
-                          color: Colors.greenAccent, size: 14),
-                  ],
+                child: Opacity(
+                  opacity: slot.isPast && !slot.occupied ? 0.45 : 1.0,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(timeFmt.format(slot.inicio),
+                          style: TextStyle(
+                              color:      isSelected ? Colors.greenAccent : color,
+                              fontSize:   13,
+                              fontWeight: FontWeight.bold)),
+                      Text(timeFmt.format(slot.fin),
+                          style: TextStyle(
+                              color: (isSelected ? Colors.greenAccent : color)
+                                  .withOpacity(0.7),
+                              fontSize: 11)),
+                      if (isSelected)
+                        const Icon(Icons.check_circle,
+                            color: Colors.greenAccent, size: 14)
+                      else if (slot.isPast && !slot.occupied)
+                        const Icon(Icons.access_time,
+                            color: Colors.redAccent, size: 11),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -865,43 +1587,185 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   // ── Dropdown usuario (modo admin) ─────────────────────────────────────────
 
   Widget _buildUserDropdown() {
-    return Container(
-      padding:      const EdgeInsets.symmetric(horizontal: 12),
-      decoration:   BoxDecoration(
-        color:        Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(children: [
-        const Icon(Icons.person, color: Colors.blueAccent, size: 20),
-        const SizedBox(width: 8),
-        Expanded(
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value:         _selectedUserId,
-              hint:          const Text('Selecciona un usuario',
-                  style: TextStyle(color: Colors.white54)),
-              dropdownColor: const Color(0xFF0A1A2F),
-              isExpanded:    true,
-              style:         const TextStyle(color: Colors.white),
-              items: _usuarios.map((u) => DropdownMenuItem(
-                value: u['id'] as String,
-                child: Text(u['nombre'] as String),
-              )).toList(),
-              onChanged: (id) async {
-                final user = _usuarios.firstWhere((u) => u['id'] == id);
-                setState(() {
-                  _selectedUserId       = id;
-                  _selectedUserName     = user['nombre'];
-                  _selectedEquipoId     = null;
-                  _selectedEquipoNombre = null;
-                  _equiposDisponibles   = [];
-                });
-                await _loadEquiposParaUsuario(id!);
-              },
-            ),
+    return GestureDetector(
+      onTap: () => _showUserPickerSheet(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _selectedUserId != null
+              ? Colors.blueAccent.withOpacity(0.1)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _selectedUserId != null
+                ? Colors.blueAccent.withOpacity(0.4)
+                : Colors.white.withOpacity(0.08),
           ),
         ),
-      ]),
+        child: Row(children: [
+          Icon(Icons.person,
+              color: _selectedUserId != null ? Colors.blueAccent : Colors.white38,
+              size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _selectedUserName ?? 'Toca para seleccionar un usuario',
+              style: TextStyle(
+                  color:    _selectedUserId != null ? Colors.white : Colors.white38,
+                  fontSize: 14),
+            ),
+          ),
+          Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _showUserPickerSheet() async {
+    final searchCtrl = TextEditingController();
+    String query = '';
+
+    await showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    AppTheme.modalBg,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => DraggableScrollableSheet(
+          initialChildSize: 0.75,
+          minChildSize:     0.5,
+          maxChildSize:     0.95,
+          expand: false,
+          builder: (_, scrollCtrl) => Column(children: [
+            // Handle
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 16),
+            const Text('Selecciona un usuario',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            // Buscador
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: searchCtrl,
+                autofocus:  true,
+                style:      const TextStyle(color: Colors.white),
+                onChanged:  (v) => setModal(() => query = v.toLowerCase()),
+                decoration: InputDecoration(
+                  hintText:   'Buscar usuario...',
+                  hintStyle:  const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  filled:     true,
+                  fillColor:  Colors.white.withOpacity(0.07),
+                  border:     OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:   BorderSide.none),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Lista filtrada
+            Expanded(
+              child: ListView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: _usuarios
+                    .where((u) =>
+                query.isEmpty ||
+                    (u['nombre'] as String)
+                        .toLowerCase()
+                        .contains(query) ||
+                    (u['email'] as String? ?? '')
+                        .toLowerCase()
+                        .contains(query))
+                    .map((u) {
+                  final isSelected = _selectedUserId == u['id'];
+                  return GestureDetector(
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        _selectedUserId       = u['id'];
+                        _selectedUserName     = u['nombre'];
+                        _selectedEquipoId     = null;
+                        _selectedEquipoNombre = null;
+                        _equiposDisponibles   = [];
+                      });
+                      await _loadEquipos();
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.blueAccent.withOpacity(0.15)
+                            : Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.blueAccent
+                              : Colors.white.withOpacity(0.07),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(children: [
+                        CircleAvatar(
+                          radius:          18,
+                          backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                          child: Text(
+                            (u['nombre'] as String).isNotEmpty
+                                ? (u['nombre'] as String)[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                                color:      Colors.blueAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize:   14),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(u['nombre'] as String,
+                                  style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      fontSize: 14)),
+                              Text(u['email'] as String? ?? '',
+                                  style: const TextStyle(
+                                      color:    Colors.white38,
+                                      fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        if (isSelected)
+                          const Icon(Icons.check_circle,
+                              color: Colors.blueAccent, size: 18),
+                      ]),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ]),
+        ),
+      ),
     );
   }
 
@@ -973,8 +1837,6 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
     }
   }
 
-  String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 // ── Modelo auxiliar de slot ───────────────────────────────────────────────────
@@ -984,11 +1846,13 @@ class _TimeSlot {
   final DateTime fin;
   final bool     occupied;
   final String?  occupiedBy;
+  final bool     isPast;
 
   const _TimeSlot({
     required this.inicio,
     required this.fin,
     required this.occupied,
     this.occupiedBy,
+    this.isPast = false,
   });
 }

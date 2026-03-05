@@ -2,10 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:gesport/models/team.dart';
 import 'package:gesport/services/team_service.dart';
+import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
 
 class TeamFormScreen extends StatefulWidget {
   final TeamModel? team;
-  const TeamFormScreen({super.key, this.team});
+  /// Si true: el entrenador solo puede editar jugadores (no entrenador ni deporte)
+  final bool coachMode;
+  const TeamFormScreen({super.key, this.team, this.coachMode = false});
 
   @override
   State<TeamFormScreen> createState() => _TeamFormScreenState();
@@ -26,6 +30,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
   String? _selectedCoachId;
   String? _selectedCoachName;
   final Set<String> _selectedPlayerIds = {};
+  String? _selectedDeporte;
 
   bool get isEditing => widget.team != null;
 
@@ -35,9 +40,10 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
     if (isEditing) {
       _nameCtrl.text = widget.team!.nombre;
       _descCtrl.text = widget.team!.descripcion;
-      _selectedCoachId = widget.team!.entrenadorId;
+      _selectedCoachId   = widget.team!.entrenadorId;
       _selectedCoachName = widget.team!.entrenadorNombre;
       _selectedPlayerIds.addAll(widget.team!.jugadoresIds);
+      _selectedDeporte   = widget.team!.deporte;
     }
     _loadUsers();
   }
@@ -93,13 +99,13 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
     );
 
     final team = TeamModel(
-      id: isEditing ? widget.team!.id : '',
-      nombre: _nameCtrl.text.trim(),
-      descripcion: _descCtrl.text.trim(),
-      entrenadorId: _selectedCoachId,
-      entrenadorNombre:
-      coach.isNotEmpty ? coach['nombre'] as String : null,
-      jugadoresIds: _selectedPlayerIds.toList(),
+      id:              isEditing ? widget.team!.id : '',
+      nombre:          _nameCtrl.text.trim(),
+      descripcion:     _descCtrl.text.trim(),
+      entrenadorId:    _selectedCoachId,
+      entrenadorNombre: coach.isNotEmpty ? coach['nombre'] as String : null,
+      jugadoresIds:    _selectedPlayerIds.toList(),
+      deporte:         _selectedDeporte,
     );
 
     try {
@@ -131,7 +137,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
   void _showCoachPicker() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0D1F35),
+      backgroundColor: AppTheme.modalBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -139,7 +145,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 12),
-          _sheetHandle(),
+          const SheetHandle(),
           const SizedBox(height: 16),
           const Text('Seleccionar entrenador',
               style: TextStyle(
@@ -210,7 +216,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
   void _showPlayerPicker() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0D1F35),
+      backgroundColor: AppTheme.modalBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -225,7 +231,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
             builder: (_, scrollCtrl) => Column(
               children: [
                 const SizedBox(height: 12),
-                _sheetHandle(),
+                const SheetHandle(),
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -315,7 +321,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0E5CAD),
+                        backgroundColor: AppTheme.primary,
                         shape: RoundedRectangleBorder(
                             borderRadius:
                             BorderRadius.circular(12)),
@@ -342,7 +348,10 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(isEditing ? 'Editar Equipo' : 'Nuevo Equipo',
+        title: Text(
+            widget.coachMode
+                ? 'Gestionar jugadores'
+                : isEditing ? 'Editar Equipo' : 'Nuevo Equipo',
             style: const TextStyle(color: Colors.white)),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -350,13 +359,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
       ),
       body: Container(
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: _isLoadingUsers
               ? const Center(
@@ -393,28 +396,39 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // ── Entrenador ──────────────────────────────
-                  _sectionLabel('Entrenador',
-                      Icons.person_pin, Colors.blueAccent),
-                  const SizedBox(height: 10),
-                  _SelectorCard(
-                    onTap: _showCoachPicker,
-                    child: _selectedCoachId == null
-                        ? _PlaceholderRow(
-                      icon: Icons.person_add_outlined,
-                      text: 'Toca para asignar entrenador',
-                      color: Colors.blueAccent,
-                    )
-                        : _SelectedUserRow(
-                      name: _selectedCoachName ?? '',
-                      color: Colors.blueAccent,
-                      onRemove: () => setState(() {
-                        _selectedCoachId = null;
-                        _selectedCoachName = null;
-                      }),
+                  // ── Deporte (solo admin) ─────────────────────
+                  if (!widget.coachMode) ...[
+                    _sectionLabel('Deporte', Icons.sports,
+                        Colors.purpleAccent),
+                    const SizedBox(height: 12),
+                    _buildDeporteSelector(),
+                    const SizedBox(height: 28),
+                  ],
+
+                  // ── Entrenador (solo admin) ──────────────────
+                  if (!widget.coachMode) ...[
+                    _sectionLabel('Entrenador',
+                        Icons.person_pin, Colors.blueAccent),
+                    const SizedBox(height: 10),
+                    _SelectorCard(
+                      onTap: _showCoachPicker,
+                      child: _selectedCoachId == null
+                          ? _PlaceholderRow(
+                        icon: Icons.person_add_outlined,
+                        text: 'Toca para asignar entrenador',
+                        color: Colors.blueAccent,
+                      )
+                          : _SelectedUserRow(
+                        name: _selectedCoachName ?? '',
+                        color: Colors.blueAccent,
+                        onRemove: () => setState(() {
+                          _selectedCoachId = null;
+                          _selectedCoachName = null;
+                        }),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 28),
+                    const SizedBox(height: 28),
+                  ],
 
                   // ── Jugadores ───────────────────────────────
                   _sectionLabel('Jugadores',
@@ -493,7 +507,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
                       onPressed: _isLoading ? null : _save,
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
-                        const Color(0xFF0E5CAD),
+                        AppTheme.primary,
                         shape: RoundedRectangleBorder(
                             borderRadius:
                             BorderRadius.circular(12)),
@@ -522,14 +536,7 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  Widget _sheetHandle() => Container(
-    width: 40,
-    height: 4,
-    decoration: BoxDecoration(
-      color: Colors.white24,
-      borderRadius: BorderRadius.circular(2),
-    ),
-  );
+  // const SheetHandle() → usa const SheetHandle() de app_widgets.dart
 
   Widget _sectionLabel(String text, IconData icon, Color color) => Row(
     children: [
@@ -542,6 +549,53 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
               fontWeight: FontWeight.w600)),
     ],
   );
+
+
+  static const _deportes = [
+    ('Fútbol',     'futbol',     Icons.sports_soccer),
+    ('Baloncesto', 'baloncesto', Icons.sports_basketball),
+    ('Tenis',      'tenis',      Icons.sports_tennis),
+    ('Pádel',      'padel',      Icons.sports_tennis),
+    ('Voley',      'voley',      Icons.sports_volleyball),
+  ];
+
+  Widget _buildDeporteSelector() {
+    return Wrap(
+      spacing: 8, runSpacing: 8,
+      children: _deportes.map((d) {
+        final selected = _selectedDeporte == d.$2;
+        return GestureDetector(
+          onTap: () => setState(() => _selectedDeporte = d.$2),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected
+                  ? Colors.purpleAccent.withOpacity(0.2)
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected
+                    ? Colors.purpleAccent
+                    : Colors.white.withOpacity(0.1),
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(d.$3, size: 16,
+                  color: selected ? Colors.purpleAccent : Colors.white54),
+              const SizedBox(width: 6),
+              Text(d.$1,
+                  style: TextStyle(
+                      color:      selected ? Colors.purpleAccent : Colors.white70,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      fontSize:   13)),
+            ]),
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   InputDecoration _fieldDeco(String label, IconData icon) =>
       InputDecoration(

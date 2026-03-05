@@ -5,6 +5,7 @@ import 'package:gesport/screens/teams_screen.dart';
 import 'package:gesport/screens/courts_screen.dart';
 import 'package:gesport/screens/bookings_screen.dart';
 import 'package:gesport/screens/seed_screen.dart';
+import 'package:gesport/utils/app_theme.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -39,13 +40,7 @@ class DashboardScreen extends StatelessWidget {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(20.0),

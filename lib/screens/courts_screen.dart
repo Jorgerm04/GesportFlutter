@@ -2,29 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:gesport/models/court.dart';
 import 'package:gesport/services/court_service.dart';
 import 'package:gesport/screens/court_form_screen.dart';
+import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
 
 class CourtsScreen extends StatelessWidget {
   const CourtsScreen({super.key});
 
   Future<void> _delete(BuildContext context, CourtModel court) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0A1A2F),
-        title: const Text('Eliminar pista',
-            style: TextStyle(color: Colors.white)),
-        content: Text('¿Seguro que quieres eliminar "${court.nombre}"?',
-            style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Eliminar',
-                  style: TextStyle(color: Colors.redAccent))),
-        ],
-      ),
+    final confirm = await ConfirmDialog.show(
+      context,
+      title: 'Eliminar pista',
+      content: '¿Seguro que quieres eliminar "${court.nombre}"?',
+      confirmLabel: 'Eliminar',
     );
     if (confirm == true) await CourtService().deleteCourt(court.id);
   }
@@ -52,7 +41,7 @@ class CourtsScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF0E5CAD),
+        backgroundColor: AppTheme.primary,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () => Navigator.push(
           context,
@@ -60,13 +49,7 @@ class CourtsScreen extends StatelessWidget {
         ),
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: StreamBuilder<List<CourtModel>>(
             stream: CourtService().getCourts(),

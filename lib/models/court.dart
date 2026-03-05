@@ -66,4 +66,22 @@ class CourtModel {
       'precioPorHora': precioPorHora,
     };
   }
+
+  CourtModel copyWith({
+    String?    id,
+    String?    nombre,
+    CourtType? tipo,
+    String?    descripcion,
+    bool?      activa,
+    double?    precioPorHora,
+    DateTime?  createdAt,
+  }) => CourtModel(
+    id:            id            ?? this.id,
+    nombre:        nombre        ?? this.nombre,
+    tipo:          tipo          ?? this.tipo,
+    descripcion:   descripcion   ?? this.descripcion,
+    activa:        activa        ?? this.activa,
+    precioPorHora: precioPorHora ?? this.precioPorHora,
+    createdAt:     createdAt     ?? this.createdAt,
+  );
 }

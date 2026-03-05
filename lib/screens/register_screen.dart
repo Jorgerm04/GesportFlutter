@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gesport/services/auth_service.dart';
+import 'package:gesport/services/user_service.dart';
+import 'package:gesport/utils/app_theme.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,6 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController ageController = TextEditingController();
   final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
 
   bool obscurePassword = true;
   bool isLoading = false;
@@ -55,53 +57,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (credential != null && credential.user != null) {
         final String uid = credential.user!.uid;
-        final int? age = ageText.isNotEmpty ? int.tryParse(ageText) : null;
+        final int?   age = ageText.isNotEmpty ? int.tryParse(ageText) : null;
 
-        final querySnapshot = await FirebaseFirestore.instance
-            .collection('usuarios')
-            .where('email', isEqualTo: email)
-            .get();
-
-        if (querySnapshot.docs.isNotEmpty) {
-          // CASO A: El Admin ya creó el perfil
-          String oldDocId = querySnapshot.docs.first.id;
-          Map<String, dynamic> existingData =
-          querySnapshot.docs.first.data();
-
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(uid)
-              .set({
-            'nombre': username,
-            'email': email,
-            'phone': phone,
-            'age': age,
-            'rol': existingData['rol'] ?? 'jugador',
-            'createdAt':
-            existingData['createdAt'] ?? FieldValue.serverTimestamp(),
-            'lastLogin': FieldValue.serverTimestamp(),
-          });
-
-          if (oldDocId != uid) {
-            await FirebaseFirestore.instance
-                .collection('usuarios')
-                .doc(oldDocId)
-                .delete();
-          }
-        } else {
-          // CASO B: Registro totalmente nuevo
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(uid)
-              .set({
-            'nombre': username,
-            'email': email,
-            'phone': phone,
-            'age': age,
-            'rol': 'jugador',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
+        await _userService.syncAfterRegister(
+          uid:    uid,
+          nombre: username,
+          email:  email,
+          phone:  phone,
+          age:    age,
+        );
 
         if (mounted) {
           _showSnackBar('Cuenta creada con éxito', isError: false);
@@ -123,13 +87,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           constraints: BoxConstraints(
             minHeight: MediaQuery.of(context).size.height,
           ),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-            ),
-          ),
+          decoration: AppTheme.backgroundDecoration,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -201,7 +159,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: ElevatedButton(
                       onPressed: isLoading ? null : _handleRegister,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0E5CAD),
+                        backgroundColor: AppTheme.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),

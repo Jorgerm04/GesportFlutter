@@ -2,48 +2,52 @@ import 'package:flutter/material.dart';
 import 'package:gesport/models/team.dart';
 import 'package:gesport/services/team_service.dart';
 import 'package:gesport/screens/team_form_screen.dart';
+import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
+import 'package:gesport/utils/app_utils.dart';
 
 class TeamsScreen extends StatelessWidget {
-  const TeamsScreen({super.key});
+  /// Si se pasa [coachId], la pantalla entra en "modo entrenador":
+  /// solo muestra los equipos de ese entrenador, sin poder crear/eliminar.
+  final String? coachId;
+  final String? coachNombre;
+
+  const TeamsScreen({super.key, this.coachId, this.coachNombre});
+
+  bool get _isCoachMode => coachId != null;
 
   Future<void> _delete(BuildContext context, TeamModel team) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0A1A2F),
-        title: const Text('Eliminar equipo',
-            style: TextStyle(color: Colors.white)),
-        content: Text(
-          '¿Seguro que quieres eliminar "${team.nombre}"?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Eliminar',
-                  style: TextStyle(color: Colors.redAccent))),
-        ],
-      ),
+    final confirm = await ConfirmDialog.show(
+      context,
+      title: 'Eliminar equipo',
+      content: '¿Seguro que quieres eliminar "${team.nombre}"?',
+      confirmLabel: 'Eliminar',
     );
     if (confirm == true) await TeamService().deleteTeam(team.id);
   }
 
   @override
   Widget build(BuildContext context) {
+    final stream = _isCoachMode
+        ? TeamService().getTeamsByCoach(coachId!)
+        : TeamService().getTeams();
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Gestión de Equipos',
-            style: TextStyle(color: Colors.white)),
+        title: Text(
+          _isCoachMode ? 'Mis equipos' : 'Gestión de Equipos',
+          style: const TextStyle(color: Colors.white),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF0E5CAD),
+      // FAB solo para admin
+      floatingActionButton: _isCoachMode
+          ? null
+          : FloatingActionButton(
+        backgroundColor: AppTheme.primary,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () => Navigator.push(
           context,
@@ -51,16 +55,10 @@ class TeamsScreen extends StatelessWidget {
         ),
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-          ),
-        ),
+        decoration: AppTheme.backgroundDecoration,
         child: SafeArea(
           child: StreamBuilder<List<TeamModel>>(
-            stream: TeamService().getTeams(),
+            stream: stream,
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -68,9 +66,13 @@ class TeamsScreen extends StatelessWidget {
               }
               final teams = snap.data ?? [];
               if (teams.isEmpty) {
-                return const Center(
-                  child: Text('No hay equipos creados',
-                      style: TextStyle(color: Colors.white54)),
+                return Center(
+                  child: Text(
+                    _isCoachMode
+                        ? 'No tienes equipos asignados'
+                        : 'No hay equipos creados',
+                    style: const TextStyle(color: Colors.white54),
+                  ),
                 );
               }
               return ListView.separated(
@@ -107,41 +109,55 @@ class TeamsScreen extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 6),
-                          Row(
-                            children: [
+                          Row(children: [
+                            if (!_isCoachMode) ...[
                               _chip(
                                 Icons.person_pin,
                                 team.entrenadorNombre ?? 'Sin entrenador',
                                 Colors.blueAccent,
                               ),
                               const SizedBox(width: 8),
+                            ],
+                            _chip(
+                              Icons.sports_soccer,
+                              '${team.jugadoresIds.length} jugadores',
+                              Colors.greenAccent,
+                            ),
+                            if (team.deporte != null) ...[
+                              const SizedBox(width: 8),
                               _chip(
-                                Icons.sports_soccer,
-                                '${team.jugadoresIds.length} jugadores',
-                                Colors.greenAccent,
+                                Icons.sports,
+                                deporteLabel(team.deporte!),
+                                Colors.purpleAccent,
                               ),
                             ],
-                          ),
+                          ]),
                         ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Editar — en modo entrenador solo jugadores
                           IconButton(
                             icon: const Icon(Icons.edit_outlined,
                                 color: Colors.white70),
                             onPressed: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) =>
-                                      TeamFormScreen(team: team)),
+                                builder: (_) => TeamFormScreen(
+                                  team:      team,
+                                  coachMode: _isCoachMode,
+                                ),
+                              ),
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete,
-                                color: Colors.redAccent),
-                            onPressed: () => _delete(context, team),
-                          ),
+                          // Eliminar solo para admin
+                          if (!_isCoachMode)
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.redAccent),
+                              onPressed: () => _delete(context, team),
+                            ),
                         ],
                       ),
                     ),
@@ -161,9 +177,10 @@ class TeamsScreen extends StatelessWidget {
       children: [
         Icon(icon, size: 12, color: color),
         const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(color: color, fontSize: 11)),
+        Text(label, style: TextStyle(color: color, fontSize: 11)),
       ],
     );
   }
+
+// deporteLabel() → importado de app_utils.dart
 }

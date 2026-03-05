@@ -1,9 +1,7 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:gesport/screens/dashboard_screen.dart';
-import 'package:gesport/screens/home_screen.dart';
 import 'package:gesport/screens/register_screen.dart';
 import 'package:gesport/services/auth_service.dart'; // IMPORTA TU SERVICIO
+import 'package:gesport/utils/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -68,13 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Container(
           width: MediaQuery.of(context).size.width,
           height: MediaQuery.of(context).size.height,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF0A1A2F), Color(0xFF050B14)],
-            ),
-          ),
+          decoration: AppTheme.backgroundDecoration,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -135,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: isLoading ? null : _handleLogin, // Cambiado aquí
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0E5CAD),
+                        backgroundColor: AppTheme.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),

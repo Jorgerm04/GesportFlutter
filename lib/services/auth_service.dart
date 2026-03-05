@@ -28,7 +28,7 @@ class AuthService {
         email: email,
         password: password,
       );
-      
+
       await credential.user?.updateDisplayName(username);
 
       return credential;
@@ -44,11 +44,11 @@ class AuthService {
       if (doc.exists) {
         return doc.get('rol') as String?;
       } else {
-        return 'usuario'; // Retorno por defecto para que no se quede cargando
+        return 'jugador'; // rol por defecto // Retorno por defecto para que no se quede cargando
       }
     } catch (e) {
       print("Error en getUserRole: $e");
-      return 'usuario';
+      return 'jugador'; // rol por defecto
     }
   }
 

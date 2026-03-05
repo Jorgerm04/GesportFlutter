@@ -12,6 +12,15 @@ class TeamService {
     );
   }
 
+  Stream<List<TeamModel>> getTeamsByCoach(String coachId) {
+    return _col
+        .where('entrenadorId', isEqualTo: coachId)
+        .snapshots()
+        .map((snap) => snap.docs
+        .map((d) => TeamModel.fromMap(d.id, d.data()))
+        .toList());
+  }
+
   Future<TeamModel?> getTeam(String id) async {
     final doc = await _col.doc(id).get();
     if (!doc.exists) return null;
