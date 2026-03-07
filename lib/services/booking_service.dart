@@ -15,14 +15,11 @@ class BookingService {
   Stream<List<BookingModel>> getAllBookings() =>
       _col.orderBy('fecha', descending: true).snapshots().map(_map);
 
-  Stream<List<BookingModel>> getUserBookings(String userId) =>
+  Stream<List<BookingModel>> _getUserBookings(String userId) =>
       _col.where('usuarioId', isEqualTo: userId).snapshots().map(_map);
 
-  Stream<List<BookingModel>> getEquipoBookings(String equipoId) =>
+  Stream<List<BookingModel>> _getEquipoBookings(String equipoId) =>
       _col.where('equipoId', isEqualTo: equipoId).snapshots().map(_map);
-
-  Stream<List<BookingModel>> getCourtBookings(String courtId) =>
-      _col.where('pistaId', isEqualTo: courtId).snapshots().map(_map);
 
   Stream<List<BookingModel>> getPartidosArbitro(String arbitroId) =>
       _col.where('arbitroId', isEqualTo: arbitroId).snapshots().map(_map);
@@ -30,10 +27,10 @@ class BookingService {
   /// Combina reservas individuales + de todos los equipos del usuario.
   Stream<List<BookingModel>> getAllUserRelatedBookings(
       String userId, List<String> equipoIds) {
-    final individual = getUserBookings(userId);
+    final individual = _getUserBookings(userId);
     if (equipoIds.isEmpty) return individual;
     return Rx.combineLatestList<List<BookingModel>>(
-      [individual, ...equipoIds.map(getEquipoBookings)],
+      [individual, ...equipoIds.map(_getEquipoBookings)],
     ).map((lists) {
       final seen = <String>{};
       return [
@@ -124,5 +121,20 @@ class BookingService {
       if (inicio.isBefore(b.fechaFin) && fin.isAfter(b.fechaInicio)) return true;
     }
     return false;
+  }
+
+  /// Todos los equipos (para modo admin en el formulario de reservas).
+  Future<List<Map<String, String>>> getAllEquipos() async {
+    final snap = await _equipos.orderBy('nombre').get();
+    return snap.docs.map((d) {
+      final data = d.data();
+      return {
+        'id':               d.id,
+        'nombre':           data['nombre']           as String? ?? '',
+        'entrenadorId':     data['entrenadorId']     as String? ?? '',
+        'entrenadorNombre': data['entrenadorNombre'] as String? ?? '',
+        'deporte':          data['deporte']          as String? ?? '',
+      };
+    }).toList();
   }
 }

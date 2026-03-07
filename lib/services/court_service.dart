@@ -41,4 +41,15 @@ class CourtService {
   Future<void> deleteCourt(String id) async {
     await _col.doc(id).delete();
   }
+
+  /// Devuelve las pistas activas como Future (para cargar una sola vez).
+  Future<List<CourtModel>> getActiveCourtsOnce() async {
+    final snap = await _col
+        .where('activa', isEqualTo: true)
+        .get();
+    return snap.docs
+        .map((d) => CourtModel.fromMap(d.id, d.data()))
+        .toList()
+      ..sort((a, b) => a.nombre.compareTo(b.nombre));
+  }
 }

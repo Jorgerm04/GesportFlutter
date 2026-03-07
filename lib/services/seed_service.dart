@@ -547,7 +547,6 @@ class SeedService {
         'notas':            'Entrenamiento semanal del equipo',
         'equipoId':         eq0.id,
         'equipoNombre':     eq0Nombre,
-        'creadaPorAdminId': null,
         'createdAt':        FieldValue.serverTimestamp(),
       });
 
@@ -567,7 +566,6 @@ class SeedService {
         'notas':            'Preparación partido del domingo',
         'equipoId':         eq0.id,
         'equipoNombre':     eq0Nombre,
-        'creadaPorAdminId': null,
         'createdAt':        FieldValue.serverTimestamp(),
       });
     }
@@ -595,7 +593,6 @@ class SeedService {
         'notas':            'Sesión táctica previa al torneo',
         'equipoId':         eq1.id,
         'equipoNombre':     eq1Nombre,
-        'creadaPorAdminId': null,
         'createdAt':        FieldValue.serverTimestamp(),
       });
     }
@@ -631,7 +628,6 @@ class SeedService {
         'horaFin':               Timestamp.fromDate(
             DateTime(d(5).year, d(5).month, d(5).day, 12, 30)),
         'cancelada':             false,
-        'creadaPorAdminId':      'admin',
         'deporte':               'futbol',
         'equipoLocalId':         eq0.id,
         'equipoLocalNombre':     eq0d['nombre'] as String? ?? '',
@@ -659,7 +655,6 @@ class SeedService {
         'horaFin':               Timestamp.fromDate(
             DateTime(f(7).year, f(7).month, f(7).day, 18, 0)),
         'cancelada':             false,
-        'creadaPorAdminId':      'admin',
         'deporte':               'futbol',
         'equipoLocalId':         eq1.id,
         'equipoLocalNombre':     eq1d['nombre'] as String? ?? '',
@@ -699,7 +694,6 @@ class SeedService {
       'horaFin':          Timestamp.fromDate(fin),
       'cancelada':        cancelada,
       'notas':            notas,
-      'creadaPorAdminId': null,
       'createdAt':        FieldValue.serverTimestamp(),
     };
   }

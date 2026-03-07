@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:gesport/models/team.dart';
 import 'package:gesport/services/team_service.dart';
@@ -56,35 +55,19 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
   }
 
   Future<void> _loadUsers() async {
-    final snap =
-    await FirebaseFirestore.instance.collection('usuarios').get();
-    final coaches = <Map<String, dynamic>>[];
-    final players = <Map<String, dynamic>>[];
-
-    for (final doc in snap.docs) {
-      final data = doc.data();
-      final entry = {
-        'id': doc.id,
-        'nombre': data['nombre'] ?? 'Sin nombre',
-        'email': data['email'] ?? '',
-      };
-      final rol = data['rol'] ?? 'jugador';
-      if (rol == 'entrenador') coaches.add(entry);
-      if (rol == 'jugador') players.add(entry);
-    }
-
+    final result = await _service.getUsersForForm();
     if (mounted) {
       setState(() {
-        _allCoaches = coaches;
-        _allPlayers = players;
+        _allCoaches = result.coaches;
+        _allPlayers = result.players;
         _isLoadingUsers = false;
         if (_selectedCoachId != null &&
-            !coaches.any((c) => c['id'] == _selectedCoachId)) {
+            !result.coaches.any((c) => c['id'] == _selectedCoachId)) {
           _selectedCoachId = null;
           _selectedCoachName = null;
         }
         _selectedPlayerIds
-            .removeWhere((id) => !players.any((p) => p['id'] == id));
+            .removeWhere((id) => !result.players.any((p) => p['id'] == id));
       });
     }
   }
@@ -345,189 +328,154 @@ class _TeamFormScreenState extends State<TeamFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: Text(
-            widget.coachMode
-                ? 'Gestionar jugadores'
-                : isEditing ? 'Editar Equipo' : 'Nuevo Equipo',
-            style: const TextStyle(color: Colors.white)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Container(
-        height: double.infinity,
-        decoration: AppTheme.backgroundDecoration,
-        child: SafeArea(
-          child: _isLoadingUsers
-              ? const Center(
-              child: CircularProgressIndicator(color: Colors.white))
-              : SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Nombre
-                  TextFormField(
-                    controller: _nameCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    validator: (val) =>
-                    (val == null || val.isEmpty)
-                        ? 'Campo obligatorio'
-                        : null,
-                    decoration: _fieldDeco(
-                        'Nombre del equipo',
-                        Icons.groups_rounded),
+    return AppScaffold(
+      title: widget.coachMode ? 'Gestionar jugadores' : isEditing ? 'Editar Equipo' : 'Nuevo Equipo',
+      body: _isLoadingUsers
+          ? const Center(
+          child: CircularProgressIndicator(color: Colors.white))
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Nombre
+              TextFormField(
+                controller: _nameCtrl,
+                style: const TextStyle(color: Colors.white),
+                validator: (val) =>
+                (val == null || val.isEmpty)
+                    ? 'Campo obligatorio'
+                    : null,
+                decoration: _fieldDeco(
+                    'Nombre del equipo',
+                    Icons.groups_rounded),
+              ),
+              const SizedBox(height: 20),
+
+              // Descripción
+              TextFormField(
+                controller: _descCtrl,
+                maxLines: 2,
+                style: const TextStyle(color: Colors.white),
+                decoration:
+                _fieldDeco('Descripción (opcional)',
+                    Icons.notes),
+              ),
+              const SizedBox(height: 28),
+
+              // ── Deporte (solo admin) ─────────────────────
+              if (!widget.coachMode) ...[
+                _sectionLabel('Deporte', Icons.sports,
+                    Colors.purpleAccent),
+                const SizedBox(height: 12),
+                _buildDeporteSelector(),
+                const SizedBox(height: 28),
+              ],
+
+              // ── Entrenador (solo admin) ──────────────────
+              if (!widget.coachMode) ...[
+                _sectionLabel('Entrenador',
+                    Icons.person_pin, Colors.blueAccent),
+                const SizedBox(height: 10),
+                _SelectorCard(
+                  onTap: _showCoachPicker,
+                  child: _selectedCoachId == null
+                      ? _PlaceholderRow(
+                    icon: Icons.person_add_outlined,
+                    text: 'Toca para asignar entrenador',
+                    color: Colors.blueAccent,
+                  )
+                      : _SelectedUserRow(
+                    name: _selectedCoachName ?? '',
+                    color: Colors.blueAccent,
+                    onRemove: () => setState(() {
+                      _selectedCoachId = null;
+                      _selectedCoachName = null;
+                    }),
                   ),
-                  const SizedBox(height: 20),
+                ),
+                const SizedBox(height: 28),
+              ],
 
-                  // Descripción
-                  TextFormField(
-                    controller: _descCtrl,
-                    maxLines: 2,
-                    style: const TextStyle(color: Colors.white),
-                    decoration:
-                    _fieldDeco('Descripción (opcional)',
-                        Icons.notes),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // ── Deporte (solo admin) ─────────────────────
-                  if (!widget.coachMode) ...[
-                    _sectionLabel('Deporte', Icons.sports,
-                        Colors.purpleAccent),
-                    const SizedBox(height: 12),
-                    _buildDeporteSelector(),
-                    const SizedBox(height: 28),
-                  ],
-
-                  // ── Entrenador (solo admin) ──────────────────
-                  if (!widget.coachMode) ...[
-                    _sectionLabel('Entrenador',
-                        Icons.person_pin, Colors.blueAccent),
-                    const SizedBox(height: 10),
-                    _SelectorCard(
-                      onTap: _showCoachPicker,
-                      child: _selectedCoachId == null
-                          ? _PlaceholderRow(
-                        icon: Icons.person_add_outlined,
-                        text: 'Toca para asignar entrenador',
-                        color: Colors.blueAccent,
-                      )
-                          : _SelectedUserRow(
-                        name: _selectedCoachName ?? '',
-                        color: Colors.blueAccent,
-                        onRemove: () => setState(() {
-                          _selectedCoachId = null;
-                          _selectedCoachName = null;
-                        }),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                  ],
-
-                  // ── Jugadores ───────────────────────────────
-                  _sectionLabel('Jugadores',
-                      Icons.sports_soccer, Colors.greenAccent),
-                  const SizedBox(height: 10),
-                  _SelectorCard(
-                    onTap: _showPlayerPicker,
-                    child: _selectedPlayerIds.isEmpty
-                        ? _PlaceholderRow(
-                      icon: Icons.group_add_outlined,
-                      text:
-                      'Toca para añadir jugadores',
-                      color: Colors.greenAccent,
-                    )
-                        : Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _allPlayers
-                          .where((p) =>
-                          _selectedPlayerIds
-                              .contains(p['id']))
-                          .map((p) => RawChip(
-                        avatar: CircleAvatar(
-                          backgroundColor:
-                          Colors.greenAccent
-                              .withOpacity(0.25),
-                          child: Text(
-                            (p['nombre'] as String)[0]
-                                .toUpperCase(),
-                            style: const TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 11,
-                                fontWeight:
-                                FontWeight.bold),
-                          ),
-                        ),
-                        label: Text(
-                          p['nombre'] as String,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12),
-                        ),
-                        backgroundColor:
-                        const Color(0xFF1A3050),
-                        deleteIcon: const Icon(
-                            Icons.close,
-                            size: 14,
-                            color: Colors.white54),
-                        onDeleted: () => setState(
-                                () => _selectedPlayerIds
-                                .remove(p['id'])),
-                        side: BorderSide(
-                            color: Colors.greenAccent
-                                .withOpacity(0.3)),
-                      ))
-                          .toList(),
-                    ),
-                  ),
-                  if (_selectedPlayerIds.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
+              // ── Jugadores ───────────────────────────────
+              _sectionLabel('Jugadores',
+                  Icons.sports_soccer, Colors.greenAccent),
+              const SizedBox(height: 10),
+              _SelectorCard(
+                onTap: _showPlayerPicker,
+                child: _selectedPlayerIds.isEmpty
+                    ? _PlaceholderRow(
+                  icon: Icons.group_add_outlined,
+                  text:
+                  'Toca para añadir jugadores',
+                  color: Colors.greenAccent,
+                )
+                    : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _allPlayers
+                      .where((p) =>
+                      _selectedPlayerIds
+                          .contains(p['id']))
+                      .map((p) => RawChip(
+                    avatar: CircleAvatar(
+                      backgroundColor:
+                      Colors.greenAccent
+                          .withOpacity(0.25),
                       child: Text(
-                        '${_selectedPlayerIds.length} jugador${_selectedPlayerIds.length == 1 ? '' : 'es'} seleccionado${_selectedPlayerIds.length == 1 ? '' : 's'} · Toca para editar',
+                        (p['nombre'] as String)[0]
+                            .toUpperCase(),
                         style: const TextStyle(
                             color: Colors.greenAccent,
-                            fontSize: 11),
+                            fontSize: 11,
+                            fontWeight:
+                            FontWeight.bold),
                       ),
                     ),
-
-                  const SizedBox(height: 40),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _save,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                        AppTheme.primary,
-                        shape: RoundedRectangleBorder(
-                            borderRadius:
-                            BorderRadius.circular(12)),
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(
-                          color: Colors.white)
-                          : Text(
-                          isEditing
-                              ? 'Guardar Cambios'
-                              : 'Crear Equipo',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16)),
+                    label: Text(
+                      p['nombre'] as String,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                    backgroundColor:
+                    const Color(0xFF1A3050),
+                    deleteIcon: const Icon(
+                        Icons.close,
+                        size: 14,
+                        color: Colors.white54),
+                    onDeleted: () => setState(
+                            () => _selectedPlayerIds
+                            .remove(p['id'])),
+                    side: BorderSide(
+                        color: Colors.greenAccent
+                            .withOpacity(0.3)),
+                  ))
+                      .toList(),
+                ),
               ),
-            ),
+              if (_selectedPlayerIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '${_selectedPlayerIds.length} jugador${_selectedPlayerIds.length == 1 ? '' : 'es'} seleccionado${_selectedPlayerIds.length == 1 ? '' : 's'} · Toca para editar',
+                    style: const TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: 11),
+                  ),
+                ),
+
+              const SizedBox(height: 40),
+
+              SaveButton(
+                label: isEditing ? 'Guardar Cambios' : 'Crear',
+                isLoading: _isLoading,
+                onPressed: _save,
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
         ),
       ),

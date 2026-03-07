@@ -67,4 +67,24 @@ class TeamService {
       'entrenadorNombre': coachNombre,
     });
   }
+
+  /// Devuelve coaches y jugadores para el formulario de equipos.
+  Future<({List<Map<String, dynamic>> coaches, List<Map<String, dynamic>> players})>
+  getUsersForForm() async {
+    final snap = await FirebaseFirestore.instance.collection('usuarios').get();
+    final coaches = <Map<String, dynamic>>[];
+    final players = <Map<String, dynamic>>[];
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final entry = {
+        'id':     doc.id,
+        'nombre': data['nombre'] ?? 'Sin nombre',
+        'email':  data['email']  ?? '',
+      };
+      final rol = data['rol'] ?? 'jugador';
+      if (rol == 'entrenador') coaches.add(entry);
+      if (rol == 'jugador')    players.add(entry);
+    }
+    return (coaches: coaches, players: players);
+  }
 }

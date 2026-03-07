@@ -37,7 +37,6 @@ class BookingModel {
 
   final bool    cancelada;
   final String? notas;
-  final String? creadaPorAdminId;
   final DateTime? createdAt;
 
   // ── Campos de reserva de equipo ──────────────────────────────────────────
@@ -79,7 +78,6 @@ class BookingModel {
     required this.horaFin,
     this.cancelada        = false,
     this.notas,
-    this.creadaPorAdminId,
     this.createdAt,
     this.equipoId,
     this.equipoNombre,
@@ -149,7 +147,6 @@ class BookingModel {
       horaFin:               horaFinVal,
       cancelada:             (data['cancelada'] as bool?)  ?? canceladaLegacy,
       notas:                 data['notas'],
-      creadaPorAdminId:      data['creadaPorAdminId'],
       createdAt:             (data['createdAt'] as Timestamp?)?.toDate(),
       equipoId:              data['equipoId'],
       equipoNombre:          data['equipoNombre'],
@@ -187,7 +184,6 @@ class BookingModel {
           horaFin.hour, horaFin.minute)),
       'cancelada':             cancelada,
       'notas':                 notas,
-      'creadaPorAdminId':      creadaPorAdminId,
       // Equipo
       'equipoId':              equipoId,
       'equipoNombre':          equipoNombre,
@@ -215,7 +211,6 @@ class BookingModel {
     DateTime?     horaFin,
     bool?         cancelada,
     String?       notas,
-    String?       creadaPorAdminId,
     DateTime?     createdAt,
     String?       equipoId,
     String?       equipoNombre,
@@ -241,7 +236,6 @@ class BookingModel {
       horaFin:               horaFin               ?? this.horaFin,
       cancelada:             cancelada             ?? this.cancelada,
       notas:                 notas                 ?? this.notas,
-      creadaPorAdminId:      creadaPorAdminId      ?? this.creadaPorAdminId,
       createdAt:             createdAt             ?? this.createdAt,
       equipoId:              equipoId              ?? this.equipoId,
       equipoNombre:          equipoNombre          ?? this.equipoNombre,

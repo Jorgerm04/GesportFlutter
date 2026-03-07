@@ -5,6 +5,7 @@ import 'package:gesport/models/team.dart';
 import 'package:gesport/screens/team_form_screen.dart';
 import 'package:gesport/services/user_service.dart';
 import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
 
 class UserFormScreen extends StatefulWidget {
   final String? uid;
@@ -119,106 +120,76 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: Text(isEditing ? 'Editar Usuario' : 'Nuevo Usuario',
-            style: const TextStyle(color: Colors.white)),
-        backgroundColor: Colors.transparent,
-        elevation:       0,
-        iconTheme:       const IconThemeData(color: Colors.white),
-      ),
-      body: Container(
-        height:     double.infinity,
-        decoration: AppTheme.backgroundDecoration,
-        child: SafeArea(
-          child: (_isLoading && isEditing)
-              ? const Center(
-              child: CircularProgressIndicator(color: Colors.white))
-              : SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTextField(
-                      controller: _nameCtrl,
-                      label: 'Nombre completo',
-                      icon:  Icons.person),
-                  const SizedBox(height: 20),
-                  _buildTextField(
-                      controller:   _emailCtrl,
-                      label:        'Email',
-                      icon:         Icons.email,
-                      enabled:      !isEditing,
-                      keyboardType: TextInputType.emailAddress),
-                  const SizedBox(height: 20),
-                  _buildTextField(
-                      controller:   _phoneCtrl,
-                      label:        'Teléfono',
-                      icon:         Icons.phone,
-                      keyboardType: TextInputType.phone,
-                      required:     false,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'[0-9+\s\-]'))
-                      ]),
-                  const SizedBox(height: 20),
-                  _buildTextField(
-                      controller:   _ageCtrl,
-                      label:        'Edad',
-                      icon:         Icons.cake,
-                      keyboardType: TextInputType.number,
-                      required:     false,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly
-                      ],
-                      validator: (val) {
-                        if (val == null || val.isEmpty) return null;
-                        final age = int.tryParse(val);
-                        if (age == null || age < 1 || age > 120) {
-                          return 'Introduce una edad válida';
-                        }
-                        return null;
-                      }),
-                  const SizedBox(height: 20),
-                  _buildRoleDropdown(),
-
-                  // Equipo asociado (solo edición)
-                  if (isEditing &&
-                      (_selectedRole == UserRole.jugador ||
-                          _selectedRole == UserRole.entrenador)) ...[
-                    const SizedBox(height: 28),
-                    _buildEquipoSection(),
+    return AppScaffold(
+      title: isEditing ? 'Editar Usuario' : 'Nuevo Usuario',
+      body: (_isLoading && isEditing)
+          ? const Center(
+          child: CircularProgressIndicator(color: Colors.white))
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTextField(
+                  controller: _nameCtrl,
+                  label: 'Nombre completo',
+                  icon:  Icons.person),
+              const SizedBox(height: 20),
+              _buildTextField(
+                  controller:   _emailCtrl,
+                  label:        'Email',
+                  icon:         Icons.email,
+                  enabled:      !isEditing,
+                  keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 20),
+              _buildTextField(
+                  controller:   _phoneCtrl,
+                  label:        'Teléfono',
+                  icon:         Icons.phone,
+                  keyboardType: TextInputType.phone,
+                  required:     false,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                        RegExp(r'[0-9+\s\-]'))
+                  ]),
+              const SizedBox(height: 20),
+              _buildTextField(
+                  controller:   _ageCtrl,
+                  label:        'Edad',
+                  icon:         Icons.cake,
+                  keyboardType: TextInputType.number,
+                  required:     false,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly
                   ],
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return null;
+                    final age = int.tryParse(val);
+                    if (age == null || age < 1 || age > 120) {
+                      return 'Introduce una edad válida';
+                    }
+                    return null;
+                  }),
+              const SizedBox(height: 20),
+              _buildRoleDropdown(),
 
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width:  double.infinity,
-                    height: 52,
-                    child:  ElevatedButton(
-                      onPressed: _isLoading ? null : _saveUser,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(
-                          color: Colors.white)
-                          : Text(
-                          isEditing
-                              ? 'Guardar Cambios'
-                              : 'Crear Usuario',
-                          style: const TextStyle(
-                              color:    Colors.white,
-                              fontSize: 16)),
-                    ),
-                  ),
-                ],
+              // Equipo asociado (solo edición)
+              if (isEditing &&
+                  (_selectedRole == UserRole.jugador ||
+                      _selectedRole == UserRole.entrenador)) ...[
+                const SizedBox(height: 28),
+                _buildEquipoSection(),
+              ],
+
+              const SizedBox(height: 40),
+              SaveButton(
+                label: isEditing ? 'Guardar Cambios' : 'Crear',
+                isLoading: _isLoading,
+                onPressed: _saveUser,
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -300,79 +271,79 @@ class _UserFormScreenState extends State<UserFormScreen> {
     final team        = TeamModel.fromMap(equipo['id'] as String, equipo);
 
     return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => TeamFormScreen(team: team)),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          decoration: BoxDecoration(
-            color:        color.withOpacity(0.07),
+        color: Colors.transparent,
+        child: InkWell(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => TeamFormScreen(team: team)),
+            ),
             borderRadius: BorderRadius.circular(12),
-            border:       Border.all(color: color.withOpacity(0.25)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color:        color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.groups_rounded, color: color, size: 24),
+            child: Ink(
+              decoration: BoxDecoration(
+                color:        color.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(12),
+                border:       Border.all(color: color.withOpacity(0.25)),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(nombre,
-                        style: const TextStyle(
-                            color:      Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize:   14)),
-                    if (descripcion.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(descripcion,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ],
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      Icon(Icons.sports_soccer,
-                          size: 12, color: color.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$jugadores jugador${jugadores == 1 ? '' : 'es'}',
-                        style: TextStyle(
-                            color: color.withOpacity(0.8), fontSize: 11),
-                      ),
-                      if (isEntrenador) ...[
-                        const SizedBox(width: 10),
-                        Icon(Icons.person_pin,
-                            size: 12, color: color.withOpacity(0.7)),
-                        const SizedBox(width: 4),
-                        Text('Tú eres el entrenador',
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(children: [
+                  Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      color:        color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.groups_rounded, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(nombre,
+                            style: const TextStyle(
+                                color:      Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize:   14)),
+                        if (descripcion.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(descripcion,
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ],
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          Icon(Icons.sports_soccer,
+                              size: 12, color: color.withOpacity(0.7)),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$jugadores jugador${jugadores == 1 ? '' : 'es'}',
                             style: TextStyle(
-                                color: color.withOpacity(0.8), fontSize: 11)),
+                                color: color.withOpacity(0.8), fontSize: 11),
+                          ),
+                          if (isEntrenador) ...[
+                            const SizedBox(width: 10),
+                            Icon(Icons.person_pin,
+                                size: 12, color: color.withOpacity(0.7)),
+                            const SizedBox(width: 4),
+                            Text('Tú eres el entrenador',
+                                style: TextStyle(
+                                    color: color.withOpacity(0.8), fontSize: 11)),
+                          ],
+                        ]),
                       ],
-                    ]),
-                  ],
-                ),
+                    ),
+                  ),
+                  Icon(Icons.chevron_right,
+                      color: color.withOpacity(0.5), size: 20),
+                ]),
               ),
-              Icon(Icons.chevron_right,
-                  color: color.withOpacity(0.5), size: 20),
-            ]),
-          ),
-        ),
-      ),
+            )
+        )
     );
-  }
+        }
 
   // ── Widgets base ──────────────────────────────────────────────────────────
 

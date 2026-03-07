@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:gesport/models/booking.dart';
 import 'package:gesport/models/user.dart';
 import 'package:gesport/services/auth_service.dart';
 import 'package:gesport/services/booking_service.dart';
+import 'package:gesport/services/user_service.dart';
 import 'package:gesport/screens/booking_form_screen.dart';
 import 'package:gesport/screens/teams_screen.dart';
 import 'package:intl/intl.dart';
@@ -22,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _auth           = FirebaseAuth.instance;
   final _bookingService = BookingService();
+  final _userService    = UserService();
 
   UserModel? _currentUser;
   String?    _firestoreUserId;
@@ -41,50 +42,28 @@ class _HomeScreenState extends State<HomeScreen> {
     final firebaseUser = _auth.currentUser;
     if (firebaseUser == null) return;
 
-    final db = FirebaseFirestore.instance;
+    final user = await _userService.getUserByUidOrEmail(
+        firebaseUser.uid, firebaseUser.email ?? '');
 
-    // 1. Intentar por UID
-    final byUid = await db.collection('usuarios').doc(firebaseUser.uid).get();
-    if (byUid.exists) {
-      if (mounted) {
-        setState(() {
-          _currentUser     = UserModel.fromMap(firebaseUser.uid, byUid.data()!);
-          _firestoreUserId = firebaseUser.uid;
-          _loadingUser     = false;
-        });
-      }
-      await _loadEquipos(firebaseUser.uid);
-      return;
-    }
-
-    // 2. Fallback por email
-    final byEmail = await db
-        .collection('usuarios')
-        .where('email', isEqualTo: firebaseUser.email)
-        .limit(1)
-        .get();
-
-    if (mounted) {
-      if (byEmail.docs.isNotEmpty) {
-        final doc = byEmail.docs.first;
-        setState(() {
-          _currentUser     = UserModel.fromMap(doc.id, doc.data());
-          _firestoreUserId = doc.id;
-          _loadingUser     = false;
-        });
-        await _loadEquipos(doc.id);
-      } else {
-        setState(() {
-          _currentUser = UserModel(
-            uid:    firebaseUser.uid,
-            nombre: firebaseUser.displayName ?? firebaseUser.email ?? 'Usuario',
-            email:  firebaseUser.email ?? '',
-          );
-          _firestoreUserId = firebaseUser.uid;
-          _loadingUser     = false;
-        });
-        if (mounted) setState(() => _loadingEquipos = false);
-      }
+    if (!mounted) return;
+    if (user != null) {
+      setState(() {
+        _currentUser     = user;
+        _firestoreUserId = user.uid;
+        _loadingUser     = false;
+      });
+      await _loadEquipos(user.uid);
+    } else {
+      setState(() {
+        _currentUser = UserModel(
+          uid:    firebaseUser.uid,
+          nombre: firebaseUser.displayName ?? firebaseUser.email ?? 'Usuario',
+          email:  firebaseUser.email ?? '',
+        );
+        _firestoreUserId = firebaseUser.uid;
+        _loadingUser     = false;
+        _loadingEquipos  = false;
+      });
     }
   }
 
@@ -105,8 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       title:        'Cancelar reserva',
       content:      b.esDeEquipo
-          ? '¿Cancelar la reserva del equipo \${b.equipoNombre} en \${b.pistaNombre}?'
-          : '¿Seguro que quieres cancelar la reserva en \${b.pistaNombre}?',
+          ? '¿Cancelar la reserva del equipo ${b.equipoNombre} en ${b.pistaNombre}?'
+          : '¿Seguro que quieres cancelar la reserva en ${b.pistaNombre}?',
       confirmLabel: 'Sí, cancelar',
     );
     if (confirm == true) {
@@ -130,29 +109,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final fmtDate = DateFormat('EEE d MMM', 'es');
     final fmtTime = DateFormat('HH:mm');
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text('GESPORT',
-            style: TextStyle(
-                color:       Colors.white,
-                fontWeight:  FontWeight.bold,
-                letterSpacing: 1.5)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            tooltip:  'Mi perfil',
-            icon:     const Icon(Icons.person_outline, color: Colors.white),
-            onPressed: () => _showProfileSheet(context),
-          ),
-          IconButton(
-            tooltip:   'Cerrar sesión',
-            icon:      const Icon(Icons.logout, color: Colors.white),
-            onPressed: () async => await AuthService().signOut(),
-          ),
-        ],
-      ),
+    return AppScaffold(
+      title: 'GESPORT',
+      titleStyle: const TextStyle(
+          color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+      actions: [
+        IconButton(
+          tooltip:  'Mi perfil',
+          icon:     const Icon(Icons.person_outline, color: Colors.white),
+          onPressed: () => _showProfileSheet(context),
+        ),
+        IconButton(
+          tooltip:   'Cerrar sesión',
+          icon:      const Icon(Icons.logout, color: Colors.white),
+          onPressed: () async => await AuthService().signOut(),
+        ),
+      ],
       floatingActionButton: _currentUser?.rol == UserRole.arbitro ? null : FloatingActionButton.extended(
         backgroundColor: AppTheme.primary,
         icon:  const Icon(Icons.add, color: Colors.white),
@@ -169,104 +141,98 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      body: Container(
-        height:     double.infinity,
-        decoration: AppTheme.backgroundDecoration,
-        child: SafeArea(
-          child: (_loadingUser || _loadingEquipos)
-              ? const Center(
-              child: CircularProgressIndicator(color: Colors.white))
-              : StreamBuilder<List<BookingModel>>(
-            stream: _currentUser?.rol == UserRole.arbitro
-                ? _bookingService.getPartidosArbitro(uid)
-                : _bookingService.getAllUserRelatedBookings(uid, _equipoIds),
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(
-                    child: CircularProgressIndicator(color: Colors.white));
-              }
+      body: (_loadingUser || _loadingEquipos)
+          ? const Center(
+          child: CircularProgressIndicator(color: Colors.white))
+          : StreamBuilder<List<BookingModel>>(
+        stream: _currentUser?.rol == UserRole.arbitro
+            ? _bookingService.getPartidosArbitro(uid)
+            : _bookingService.getAllUserRelatedBookings(uid, _equipoIds),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(
+                child: CircularProgressIndicator(color: Colors.white));
+          }
 
-              final all = snap.data ?? [];
+          final all = snap.data ?? [];
 
-              // Próximas: no canceladas y fin en el futuro
-              final proximas = all
-                  .where((b) => !b.cancelada && b.fechaFin.isAfter(now))
-                  .toList()
-                ..sort((a, b) => a.fechaInicio.compareTo(b.fechaInicio));
+          // Próximas: no canceladas y fin en el futuro
+          final proximas = all
+              .where((b) => !b.cancelada && b.fechaFin.isAfter(now))
+              .toList()
+            ..sort((a, b) => a.fechaInicio.compareTo(b.fechaInicio));
 
-              // Historial: canceladas o ya pasadas
-              final historial = all
-                  .where((b) => b.cancelada || b.fechaFin.isBefore(now))
-                  .toList()
-                ..sort((a, b) => b.fechaInicio.compareTo(a.fechaInicio));
+          // Historial: canceladas o ya pasadas
+          final historial = all
+              .where((b) => b.cancelada || b.fechaFin.isBefore(now))
+              .toList()
+            ..sort((a, b) => b.fechaInicio.compareTo(a.fechaInicio));
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Saludo
-                    const SizedBox(height: 8),
-                    Text(
-                      'Hola, ${_currentUser?.nombre.split(' ').first ?? 'jugador'} 👋',
-                      style: const TextStyle(
-                          color:      Colors.white,
-                          fontSize:   22,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _currentUser?.rol.label ?? '',
-                      style: const TextStyle(
-                          color: Colors.white38, fontSize: 13),
-                    ),
-                    const SizedBox(height: 28),
-
-                    // ── Próximas reservas ──────────────────
-                    SectionHeader(
-                        title: _currentUser?.rol == UserRole.arbitro
-                            ? 'Mis partidos'
-                            : 'Próximas reservas',
-                        icon:_currentUser?.rol == UserRole.arbitro
-                            ? Icons.sports
-                            : Icons.event_available,
-                        color:_currentUser?.rol == UserRole.arbitro
-                            ? Colors.yellowAccent
-                            : Colors.greenAccent,
-                        badge: proximas.length),
-                    const SizedBox(height: 12),
-                    if (proximas.isEmpty)
-                      EmptyState(
-                          icon:Icons.event_note,
-                          text:'No tienes reservas próximas',
-                          subtitle: 'Pulsa + para hacer una nueva reserva')
-                    else
-                      ...proximas.map((b) => _buildProximaCard(
-                          b, fmtDate, fmtTime, context)),
-
-                    const SizedBox(height: 32),
-
-                    // ── Historial ──────────────────────────
-                    SectionHeader(
-                        title: 'Historial',
-                        icon: Icons.history,
-                        color:Colors.white38,
-                        badge: historial.length),
-                    const SizedBox(height: 12),
-                    if (historial.isEmpty)
-                      EmptyState(
-                          icon: Icons.history_toggle_off,
-                          text: 'Sin historial todavía',
-                          subtitle: null)
-                    else
-                      ...historial.map((b) =>
-                          _buildHistorialCard(b, fmtDate, fmtTime)),
-                  ],
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Saludo
+                const SizedBox(height: 8),
+                Text(
+                  'Hola, ${_currentUser?.nombre.split(' ').first ?? 'jugador'} 👋',
+                  style: const TextStyle(
+                      color:      Colors.white,
+                      fontSize:   22,
+                      fontWeight: FontWeight.bold),
                 ),
-              );
-            },
-          ),
-        ),
+                const SizedBox(height: 4),
+                Text(
+                  _currentUser?.rol.label ?? '',
+                  style: const TextStyle(
+                      color: Colors.white38, fontSize: 13),
+                ),
+                const SizedBox(height: 28),
+
+                // ── Próximas reservas ──────────────────
+                SectionHeader(
+                    title: _currentUser?.rol == UserRole.arbitro
+                        ? 'Mis partidos'
+                        : 'Próximas reservas',
+                    icon:_currentUser?.rol == UserRole.arbitro
+                        ? Icons.sports
+                        : Icons.event_available,
+                    color:_currentUser?.rol == UserRole.arbitro
+                        ? Colors.yellowAccent
+                        : Colors.greenAccent,
+                    badge: proximas.length),
+                const SizedBox(height: 12),
+                if (proximas.isEmpty)
+                  EmptyState(
+                      icon:Icons.event_note,
+                      text:'No tienes reservas próximas',
+                      subtitle: 'Pulsa + para hacer una nueva reserva')
+                else
+                  ...proximas.map((b) => _buildProximaCard(
+                      b, fmtDate, fmtTime, context)),
+
+                const SizedBox(height: 32),
+
+                // ── Historial ──────────────────────────
+                SectionHeader(
+                    title: 'Historial',
+                    icon: Icons.history,
+                    color:Colors.white38,
+                    badge: historial.length),
+                const SizedBox(height: 12),
+                if (historial.isEmpty)
+                  EmptyState(
+                      icon: Icons.history_toggle_off,
+                      text: 'Sin historial todavía',
+                      subtitle: null)
+                else
+                  ...historial.map((b) =>
+                      _buildHistorialCard(b, fmtDate, fmtTime)),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

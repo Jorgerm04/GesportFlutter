@@ -117,4 +117,27 @@ class UserService {
   Future<void> deleteUser(String uid) async {
     await _col.doc(uid).delete();
   }
+
+  /// Devuelve todos los usuarios de un rol dado.
+  Future<List<Map<String, dynamic>>> getUsersByRole(List<String> roles) async {
+    final snap = await _col.get();
+    return snap.docs
+        .map((d) => {'id': d.id, ...d.data()})
+        .where((u) => roles.contains(u['rol'] ?? 'jugador'))
+        .toList();
+  }
+
+  /// Busca un usuario primero por UID, luego por email (fallback legacy).
+  Future<UserModel?> getUserByUidOrEmail(String uid, String email) async {
+    final byUid = await _col.doc(uid).get();
+    if (byUid.exists) return UserModel.fromMap(uid, byUid.data()!);
+
+    final byEmail = await _col
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+    if (byEmail.docs.isEmpty) return null;
+    final doc = byEmail.docs.first;
+    return UserModel.fromMap(doc.id, doc.data());
+  }
 }

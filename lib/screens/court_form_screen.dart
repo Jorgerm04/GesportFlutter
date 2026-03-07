@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:gesport/models/court.dart';
 import 'package:gesport/services/court_service.dart';
 import 'package:gesport/utils/app_theme.dart';
+import 'package:gesport/widgets/widgets.dart';
 
 class CourtFormScreen extends StatefulWidget {
   final CourtModel? court;
@@ -81,142 +82,115 @@ class _CourtFormScreenState extends State<CourtFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: Text(isEditing ? 'Editar Pista' : 'Nueva Pista',
-            style: const TextStyle(color: Colors.white)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Container(
-        height: double.infinity,
-        decoration: AppTheme.backgroundDecoration,
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildField(
-                    controller: _nameCtrl,
-                    label: 'Nombre de la pista',
-                    icon: Icons.stadium,
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Tipo de pista
-                  _sectionLabel('Tipo de pista'),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<CourtType>(
-                        value: _tipo,
-                        dropdownColor: AppTheme.bg1,
-                        isExpanded: true,
-                        style: const TextStyle(color: Colors.white),
-                        items: CourtType.values
-                            .map((t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(t.label),
-                        ))
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => _tipo = val!),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  _buildField(
-                    controller: _descCtrl,
-                    label: 'Descripción (opcional)',
-                    icon: Icons.notes,
-                    required: false,
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 20),
-
-                  _buildField(
-                    controller: _precioCtrl,
-                    label: 'Precio por hora (€)',
-                    icon: Icons.euro,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'[0-9.,]'))
-                    ],
-                    validator: (val) {
-                      if (val == null || val.isEmpty) return null;
-                      if (double.tryParse(val.replaceAll(',', '.')) == null) {
-                        return 'Introduce un precio válido';
-                      }
-                      return null;
-                    },
-                    required: false,
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Estado activa/inactiva
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Pista activa',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: Text(
-                        _activa
-                            ? 'Disponible para reservas'
-                            : 'No disponible para reservas',
-                        style: TextStyle(
-                            color: _activa
-                                ? Colors.greenAccent
-                                : Colors.redAccent,
-                            fontSize: 12),
-                      ),
-                      value: _activa,
-                      activeColor: Colors.greenAccent,
-                      onChanged: (val) => setState(() => _activa = val),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _save,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(
-                          color: Colors.white)
-                          : Text(
-                          isEditing ? 'Guardar Cambios' : 'Crear Pista',
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 16)),
-                    ),
-                  ),
-                ],
+    return AppScaffold(
+      title: isEditing ? 'Editar Pista' : 'Nueva Pista',
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildField(
+                controller: _nameCtrl,
+                label: 'Nombre de la pista',
+                icon: Icons.stadium,
               ),
-            ),
+              const SizedBox(height: 20),
+
+              // Tipo de pista
+              _sectionLabel('Tipo de pista'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<CourtType>(
+                    value: _tipo,
+                    dropdownColor: AppTheme.bg1,
+                    isExpanded: true,
+                    style: const TextStyle(color: Colors.white),
+                    items: CourtType.values
+                        .map((t) => DropdownMenuItem(
+                      value: t,
+                      child: Text(t.label),
+                    ))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _tipo = val!),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              _buildField(
+                controller: _descCtrl,
+                label: 'Descripción (opcional)',
+                icon: Icons.notes,
+                required: false,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+
+              _buildField(
+                controller: _precioCtrl,
+                label: 'Precio por hora (€)',
+                icon: Icons.euro,
+                keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                      RegExp(r'[0-9.,]'))
+                ],
+                validator: (val) {
+                  if (val == null || val.isEmpty) return null;
+                  if (double.tryParse(val.replaceAll(',', '.')) == null) {
+                    return 'Introduce un precio válido';
+                  }
+                  return null;
+                },
+                required: false,
+              ),
+              const SizedBox(height: 20),
+
+              // Estado activa/inactiva
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Pista activa',
+                      style: TextStyle(color: Colors.white)),
+                  subtitle: Text(
+                    _activa
+                        ? 'Disponible para reservas'
+                        : 'No disponible para reservas',
+                    style: TextStyle(
+                        color: _activa
+                            ? Colors.greenAccent
+                            : Colors.redAccent,
+                        fontSize: 12),
+                  ),
+                  value: _activa,
+                  activeColor: Colors.greenAccent,
+                  onChanged: (val) => setState(() => _activa = val),
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              SaveButton(
+                label: isEditing ? 'Guardar Cambios' : 'Crear',
+                isLoading: _isLoading,
+                onPressed: _save,
+              ),
+            ],
           ),
         ),
       ),
@@ -240,25 +214,25 @@ class _CourtFormScreenState extends State<CourtFormScreen> {
     String? Function(String?)? validator,
   }) {
     return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      style: const TextStyle(color: Colors.white),
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      validator: validator ??
-              (val) => required && (val == null || val.isEmpty)
-              ? 'Campo obligatorio'
-              : null,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        prefixIcon: Icon(icon, color: Colors.white70),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none),
-      ),
+        controller: controller,
+        maxLines: maxLines,
+        style: const TextStyle(color: Colors.white),
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        validator: validator ??
+                (val) => required && (val == null || val.isEmpty)
+                ? 'Campo obligatorio'
+                : null,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white70),
+          prefixIcon: Icon(icon, color: Colors.white70),
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.05),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
+        )
     );
-  }
+    }
 }
